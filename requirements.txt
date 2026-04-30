@@ -1,0 +1,13 @@
+streamlit>=1.35
+plotly>=5.20
+pandas>=2.0
+numpy>=1.26
+duckdb>=0.10
+huggingface_hub>=0.22
+google-genai>=0.8
+python-dotenv>=1.0
+Pillow>=10.0
+PyPDF2>=3.0
+pytest>=8.0
+requests>=2.31
+pysqlite3-binary>=0.5
