@@ -1,73 +1,82 @@
 """
-pages/chat.py
-Agent Chat page — Phase 5 (ported from existing app).
-AGENTS.md Section 6.
+pages/chat.py — Agent Chat page
 """
-
 import streamlit as st
-from agents import AGENT_REGISTRY
-from core.gemini import gemini_chat
-from core.session import append_message, get_messages, add_log
-from core.config import HEALTH_SYSTEM_PROMPT
-
-OFFLINE_KEYS = {
-    agent.TRIGGER_COMMANDS[0]: agent
-    for agent in AGENT_REGISTRY.values()
-    if agent.TRIGGER_COMMANDS
-}
-
-SUGGESTED_OPERATIONS = [
-    "Ingest synthetic patient biometric data and run clinical quality checks",
-    "Train the XGBoost chronic disease risk model and show AUC score",
-    "Run population health digital twin simulation on default cohort",
-    "Generate an executive weekly population health report",
-    "Run health data compliance scan and rotate the API secret",
-    "Predict chronic disease risk for a patient with BMI 38.5, BP 145/92, glucose 6.8",
-]
 
 
 def render() -> None:
-    st.markdown("# 💬 Health Digital Workforce Chat")
+    try:
+        _render_inner()
+    except Exception as e:
+        import traceback
+        st.error(f"❌ chat.py render() crashed: {e}")
+        st.code(traceback.format_exc(), language="python")
 
-    # Suggested operations grid
-    with st.expander("⭐ SUGGESTED HEALTH OPERATIONS", expanded=True):
-        col1, col2 = st.columns(2)
-        for i, op in enumerate(SUGGESTED_OPERATIONS):
-            col = col1 if i % 2 == 0 else col2
-            if col.button(op, use_container_width=True, key=f"op_{i}"):
-                _handle_prompt(op)
-                st.rerun()
 
-    st.divider()
+def _render_inner() -> None:
+    from core.session import append_message, get_messages
+    from agents import AGENT_REGISTRY
+    from core.chat_widget import render_chat_widget
 
-    # Chat history
-    for msg in get_messages():
-        css = "user-msg" if msg["role"] == "user" else "agent-msg"
-        st.markdown(f'<div class="{css}">{msg["content"]}</div>', unsafe_allow_html=True)
+    STICKY_TITLE_CSS = """
+<style>
+.hdw-sticky-title {
+    position: -webkit-sticky;
+    position: sticky;
+    top: 0;
+    z-index: 9999;
+    background: #0e0e1a;
+    padding: 14px 0 10px 0;
+    border-bottom: 1px solid #2a2a3d;
+    margin-bottom: 14px;
+}
+.hdw-sticky-title span {
+    color: #f5c842;
+    font-family: 'Space Mono', monospace;
+    font-size: 18px;
+    font-weight: bold;
+    letter-spacing: 0.04em;
+}
+</style>
+<div class="hdw-sticky-title">
+    <span>&#9678; HEALTH DIGITAL WORKFORCE CHAT</span>
+</div>
+"""
+    st.markdown(STICKY_TITLE_CSS, unsafe_allow_html=True)
 
-    # Free-text input
-    prompt = st.chat_input("Ask about patient health, BMI risks, disease thresholds...")
-    if prompt:
-        _handle_prompt(prompt)
+    def _get_instance(entry):
+        return entry() if isinstance(entry, type) else entry
+
+    def _route_to_agent(cmd):
+        cmd_lower = cmd.lower()
+        for entry in AGENT_REGISTRY.values():
+            try:
+                agent = _get_instance(entry)
+                for trigger in getattr(agent, "TRIGGER_COMMANDS", []):
+                    if trigger.lower() in cmd_lower or cmd_lower in trigger.lower():
+                        return agent.run(cmd)
+            except Exception:
+                continue
+        if AGENT_REGISTRY:
+            return _get_instance(next(iter(AGENT_REGISTRY.values()))).run(cmd)
+        return "⚠️ No agents available."
+
+    def _send_action(cmd):
+        append_message("user", cmd)
+        with st.status("🤖 Thinking and reasoning...", expanded=False) as status:
+            response_text = _route_to_agent(cmd)
+            status.update(label="🤖 Reasoning complete", state="complete", expanded=False)
+        append_message("assistant", response_text)
         st.rerun()
 
+    # Conversation history
+    for msg in get_messages():
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
 
-def _handle_prompt(prompt: str) -> None:
-    """Route prompt to correct agent or free Gemini chat."""
-    append_message("user", prompt)
-    add_log(f"CHAT:{prompt[:30]}")
+    # Suggested ops + chat input
+    render_chat_widget(page_key="chat")
 
-    # Check if it matches an agent trigger command
-    for cmd, agent in OFFLINE_KEYS.items():
-        if prompt.strip() == cmd:
-            reply = agent.run(prompt)
-            append_message("assistant", reply)
-            return
 
-    # Generic Gemini chat for free-form questions
-    reply = gemini_chat(
-        prompt=prompt,
-        system_prompt=HEALTH_SYSTEM_PROMPT,
-        offline_fallback="_No offline response for this query. Connect Gemini API._",
-    )
-    append_message("assistant", reply)
+# Single call — must appear exactly once at module level.
+render()
