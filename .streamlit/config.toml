@@ -1,0 +1,8 @@
+[runner]
+magicEnabled = false
+
+[server]
+runOnSave = true
+
+[browser]
+gatherUsageStats = fa

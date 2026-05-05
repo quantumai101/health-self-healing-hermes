@@ -87,3 +87,10 @@ class NovaAgent:
             system_prompt=NOVA_SYSTEM_PROMPT,
             offline_fallback=OFFLINE_RESPONSES["ehr"],
         )
+
+# Add this at the end of agents/nova.py
+AGENT_REGISTRY = {
+    "NOVA": NovaAgent
+}
+
+

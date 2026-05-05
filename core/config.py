@@ -13,11 +13,11 @@ GEMINI_MODELS = [
     ("gemini-3.1-flash-lite-preview", "Gemini 3.1 Flash-Lite"),
     ("gemini-2.5-flash",              "Gemini 2.5 Flash"),
 ]
-GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
-GEMINI_MAX_TOKENS = 2048
-GEMINI_TEMPERATURE = 0.4
-GEMINI_RETRY_ATTEMPTS = 2
-GEMINI_RETRY_CODES = {429, 503, 502, 504}
+GEMINI_BASE_URL      = "https://generativelanguage.googleapis.com/v1beta/models"
+GEMINI_MAX_TOKENS    = 2048
+GEMINI_TEMPERATURE   = 0.4
+GEMINI_RETRY_ATTEMPTS= 2
+GEMINI_RETRY_CODES   = {429, 503, 502, 504}
 
 # ---------------------------------------------------------------------------
 # BMI THRESHOLDS  (AGENTS.md Section 7)
@@ -30,7 +30,7 @@ BMI_OBESE_II    = 35.0
 BMI_OBESE_III   = 40.0
 
 BMI_BANDS = {
-    "Underweight": (0,      BMI_UNDERWEIGHT),
+    "Underweight": (0,               BMI_UNDERWEIGHT),
     "Normal":      (BMI_UNDERWEIGHT, BMI_OVERWEIGHT),
     "Overweight":  (BMI_OVERWEIGHT,  BMI_OBESE_I),
     "Obese I":     (BMI_OBESE_I,     BMI_OBESE_II),
@@ -59,10 +59,10 @@ BMI_COLORS = {
 # ---------------------------------------------------------------------------
 # BLOOD PRESSURE THRESHOLDS  (mmHg systolic)
 # ---------------------------------------------------------------------------
-BP_NORMAL    = 120
-BP_ELEVATED  = 130
-BP_STAGE1    = 140
-BP_CRISIS    = 180
+BP_NORMAL   = 120
+BP_ELEVATED = 130
+BP_STAGE1   = 140
+BP_CRISIS   = 180
 
 BP_STAGES = ["Normal", "Elevated", "Stage 1 HTN", "Stage 2 HTN", "HTN Crisis"]
 BP_COLORS = {
@@ -108,24 +108,144 @@ STATUS_COLORS = {
 # ---------------------------------------------------------------------------
 # UI THEME  (AGENTS.md Section 8)
 # ---------------------------------------------------------------------------
-UI_BG          = "#060b18"
-UI_SIDEBAR_BG  = "#0a1120"
-UI_ACCENT      = "#38bdf8"
-UI_USER_MSG_BG = "#1a2f55"
-UI_AGENT_MSG_BG= "#0f172a"
-UI_FONT_MONO   = "JetBrains Mono"
-UI_FONT_DISPLAY= "Share Tech Mono"
+UI_BG           = "#060b18"
+UI_SIDEBAR_BG   = "#0a1120"
+UI_ACCENT       = "#38bdf8"
+UI_USER_MSG_BG  = "#1a2f55"
+UI_AGENT_MSG_BG = "#0f172a"
+UI_FONT_MONO    = "JetBrains Mono"
+UI_FONT_DISPLAY = "Share Tech Mono"
 
+# ---------------------------------------------------------------------------
+# GLOBAL CSS
+# Injected once at startup via st.markdown(UI_CSS, unsafe_allow_html=True).
+#
+# Original rules from AGENTS.md Section 8 are fully preserved.
+# Added on top:
+#   • Space Mono import for sidebar nav buttons
+#   • .health-topbar-title  — page header used in each pages/*.py render()
+#   • Active-tab highlighted frame (raw HTML rendered in app.py)
+#   • st.status "Thinking" block font override
+#   • Suggestion chip button styles (main content area only)
+# ---------------------------------------------------------------------------
 UI_CSS = """
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono&family=Share+Tech+Mono&display=swap');
-    html, body, [class*="css"] { font-family: 'JetBrains Mono', monospace !important; }
-    h1, h2, h3, h4 { font-family: 'Share Tech Mono', sans-serif !important; color: #38bdf8 !important; text-transform: uppercase; }
-    .stApp { background: #060b18; }
-    [data-testid="stSidebar"] { background: #0a1120 !important; border-right: 1px solid #1e293b; }
-    .user-msg  { background: #1a2f55; border-radius: 10px; padding: 12px; margin: 6px 0; border: 1px solid #3b82f6; color: #e2e8f0; }
-    .agent-msg { background: #0f172a; border-left: 4px solid #38bdf8; padding: 12px; margin: 6px 0; color: #cbd5e1; }
-    .disclaimer { background: #1a1a2e; border: 1px solid #f59e0b; border-radius: 8px; padding: 10px; color: #f59e0b; font-size: 0.85rem; margin: 8px 0; }
+/* ── Fonts ──────────────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono&family=Share+Tech+Mono&family=Space+Mono:wght@400;700&display=swap');
+
+/* ── Global base (original) ─────────────────────────────────────────────── */
+html, body, [class*="css"] { font-family: 'JetBrains Mono', monospace !important; }
+h1, h2, h3, h4 {
+    font-family: 'Share Tech Mono', sans-serif !important;
+    color: #38bdf8 !important;
+    text-transform: uppercase;
+}
+.stApp { background: #060b18; }
+[data-testid="stSidebar"] {
+    background: #0a1120 !important;
+    border-right: 1px solid #1e293b;
+}
+
+/* ── Original chat bubble classes (used by pages that call st.markdown) ──── */
+.user-msg {
+    background: #1a2f55;
+    border-radius: 10px;
+    padding: 12px;
+    margin: 6px 0;
+    border: 1px solid #3b82f6;
+    color: #e2e8f0;
+}
+.agent-msg {
+    background: #0f172a;
+    border-left: 4px solid #38bdf8;
+    padding: 12px;
+    margin: 6px 0;
+    color: #cbd5e1;
+}
+.disclaimer {
+    background: #1a1a2e;
+    border: 1px solid #f59e0b;
+    border-radius: 8px;
+    padding: 10px;
+    color: #f59e0b;
+    font-size: 0.85rem;
+    margin: 8px 0;
+}
+
+/* ── Streamlit native st.chat_message bubbles ────────────────────────────── */
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
+    background: rgba(59, 130, 246, 0.08);
+    border: 1px solid rgba(59, 130, 246, 0.25);
+    border-radius: 10px 10px 2px 10px;
+}
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarAssistant"]) {
+    background: rgba(56, 189, 248, 0.04);
+    border: 1px solid rgba(56, 189, 248, 0.10);
+    border-radius: 2px 10px 10px 10px;
+}
+
+/* ── Sidebar nav buttons — Space Mono, rectangular, accent on hover ───────── */
+section[data-testid="stSidebar"] .stButton > button {
+    font-family: 'Space Mono', monospace !important;
+    font-size: 11px !important;
+    letter-spacing: 0.04em;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: transparent;
+    color: #7070a0;
+    padding: 7px 10px;
+    text-align: left;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+section[data-testid="stSidebar"] .stButton > button:hover {
+    background: rgba(255,255,255,0.04);
+    color: #c8c4e0;
+    border-color: rgba(255,255,255,0.15);
+}
+
+/* Remove extra bottom margin from the raw-HTML active-tab frames */
+section[data-testid="stSidebar"] p { margin-bottom: 0 !important; }
+
+/* ── Page topbar title class (used in each pages/*.py render()) ───────────── */
+.health-topbar-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+}
+
+/* ── st.status "Thinking and reasoning..." block ─────────────────────────── */
+.stStatusWidget {
+    font-family: 'Space Mono', monospace !important;
+    font-size: 11px !important;
+    border-radius: 8px;
+}
+
+/* ── Suggestion chip buttons (main content area only) ────────────────────── */
+.main .stButton > button {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.03em;
+    border: 1px solid rgba(245, 200, 66, 0.25);
+    background: rgba(245, 200, 66, 0.04);
+    color: #c0b870;
+    border-radius: 6px;
+    padding: 8px 12px;
+    text-align: left;
+    white-space: normal;
+    height: auto;
+    line-height: 1.5;
+    transition: background 0.15s, border-color 0.15s;
+}
+.main .stButton > button:hover {
+    background: rgba(245, 200, 66, 0.09);
+    border-color: rgba(245, 200, 66, 0.5);
+    color: #e0d890;
+}
+
+/* ── Misc layout tweaks ──────────────────────────────────────────────────── */
+section[data-testid="stSidebar"] > div:first-child { padding-top: 1rem; }
+.block-container { padding-top: 1.5rem; }
 </style>
 """
 
