@@ -1,17 +1,5 @@
 """
 pages/imaging.py — MediSync Imaging page
-
-Self-contained page (works as Streamlit multipage /imaging AND via app.py render()).
-
-Changes in this version:
-  • Removed disclaimer bar, global clinical context box, and paste relay
-    from above the drop zone — drop zone now sits directly under page title
-  • Paste relay moved to after the file uploader (hidden, JS still works)
-  • Full working chat window (mirroring the main chat page) rendered below
-    the file uploader section, with imaging-specific placeholder wording
-  • Auto-expanding textarea + Ctrl+V paste + drag-and-drop all preserved
-  • Per-image "Clinical notes" textarea is also auto-expanding
-  • All core.* imports are guarded so the page never goes blank on import error
 """
 
 import streamlit as st
@@ -37,8 +25,6 @@ except Exception:
     _HAS_ADD_LOG = False
 
 
-
-
 def _add_log_safe(msg: str):
     if _HAS_ADD_LOG:
         try:
@@ -51,35 +37,54 @@ def _add_log_safe(msg: str):
 # CONSTANTS
 # ---------------------------------------------------------------------------
 MODALITY_OPTIONS = [
-    "Chest X-Ray", "Abdominal X-Ray",
-    "CT Chest", "CT Abdomen/Pelvis", "CT Head",
-    "MRI Brain", "MRI Spine",
-    "Ultrasound Abdomen", "Ultrasound Pelvis",
-    "Ultrasound Cardiac (Echo)", "Ultrasound Thyroid",
-    "Ultrasound Renal", "Mammogram", "Bone Scan",
-    "ECG / Cardiac Tracing", "Other",
+    "Blood Test Report",                        # most-used, placed first
+    "ECG / Cardiac Tracing",
+    "Stress Test / Heart Ultrasound Report",    # ← new
+    "CTCA (CT Coronary Angiography)",           # ← new
+    "Chest X-Ray",
+    "Abdominal X-Ray",
+    "CT Chest",
+    "CT Abdomen/Pelvis",
+    "CT Head",
+    "MRI Brain",
+    "MRI Spine",
+    "Ultrasound Abdomen",
+    "Ultrasound Pelvis",
+    "Ultrasound Cardiac (Echo)",
+    "Ultrasound Thyroid",
+    "Ultrasound Renal",
+    "Mammogram",
+    "Bone Scan",
+    "Other",
 ]
 
 IMAGING_SYSTEM_PROMPT = """You are a specialist medical imaging AI assistant working
 within an Australian health system. When presented with a medical image (X-ray, CT,
-MRI, ultrasound, ECG, or other scan), provide a structured radiology-style report:
+CTCA, MRI, ultrasound, stress test, heart ultrasound, ECG, blood test report, or other
+scan), provide a structured report matching the exact modality selected:
 
-1. **Modality & Region** — identify the imaging type and anatomical region
-2. **Image Quality** — comment on quality, positioning, exposure
-3. **Findings** — systematic description of all visible structures
+1. **Modality & Region** — identify the imaging/test type and anatomical region
+2. **Image Quality** — comment on quality, positioning, exposure (if applicable)
+3. **Findings** — systematic description of all visible structures or values
 4. **Abnormalities** — clearly flag any abnormal findings with severity
 5. **Impression** — concise summary of key findings
 6. **Recommendations** — suggested follow-up, additional views, or referrals
 7. **Risk Level** — CRITICAL / HIGH / MODERATE / LOW / NORMAL
 
+For Stress Test / Heart Ultrasound: analyse wall motion, ejection fraction,
+stress-induced changes, and any ischaemic findings.
+For CTCA: focus on coronary artery calcification, stenosis, CAD-RADS score,
+plaque characteristics, and incidental findings.
+For Blood Test Reports: interpret all values against reference ranges, flag abnormals.
+
 IMPORTANT DISCLAIMER: This is an AI assistant for educational and workflow support
-purposes only. All findings must be reviewed and verified by a qualified radiologist
-or treating clinician before any clinical decision is made. Not for diagnostic use."""
+purposes only. All findings must be reviewed and verified by a qualified clinician
+before any clinical decision is made. Not for diagnostic use."""
 
 OFFLINE_REPORT = """## 🩻 Imaging Report — MediSync AI (Offline Simulation)
 
 **Modality:** Chest X-Ray (PA view)
-**Date:** 2026-05-03
+**Date:** 2026-05-05
 **Patient ID:** P-004821
 
 ---
@@ -91,41 +96,30 @@ Adequate inspiratory effort. Well-centred projection. No rotation artefact.
 
 **Cardiac:**
 - Cardiothoracic ratio 0.48 — within normal limits
-- No cardiomegaly
 
 **Lungs & Pleura:**
 - Mild increased interstitial markings in the left lower zone
-- No pleural effusion identified
-- No pneumothorax
-- Right lung — clear
+- No pleural effusion. No pneumothorax.
 
-**Mediastinum:**
-- Trachea midline
-- No mediastinal widening
+**Mediastinum:** Trachea midline. No mediastinal widening.
 
-**Bones & Soft Tissue:**
-- No acute bony injury
-- Incidental mild degenerative changes at lower thoracic spine
+**Bones & Soft Tissue:** No acute bony injury.
 
 ---
 
 ### Impression
 > 🟠 **Mild left lower zone interstitial changes** — differential includes early
-> consolidation vs atelectasis. No acute cardiorespiratory emergency identified.
+> consolidation vs atelectasis.
 
 ### Recommendations
-1. Clinical correlation with symptoms (cough, fever, SpO2)
+1. Clinical correlation with symptoms
 2. Repeat CXR in 4–6 weeks if symptoms persist
-3. Consider HRCT chest if changes progress
-4. Refer to respiratory medicine if clinically indicated
 
 **Risk Level:** 🟠 MODERATE
 
 ---
-⚠️ *AI simulation — offline mode. Connect live API for real image analysis.*
-⚠️ *This report is NOT a substitute for a qualified radiologist's review.*"""
+⚠️ *AI simulation — offline mode. Connect live API for real image analysis.*"""
 
-# Suggested operations shown in the chat window (mirrors main chat page style)
 IMAGING_SUGGESTED_OPS = [
     ("🩻 Analyse all queued scans for critical findings",
      "Analyse all queued scans for critical findings and flag any urgent results"),
@@ -146,50 +140,12 @@ IMAGING_SUGGESTED_OPS = [
 # ---------------------------------------------------------------------------
 PAGE_CSS = """
 <style>
-/* ── Sticky header ───────────────────────────────────────────────── */
-.hdw-sticky-title {
-    position: -webkit-sticky;
-    position: sticky;
-    top: 0;
-    z-index: 9999;
-    background: #0e0e1a;
-    padding: 14px 4px 12px 4px;
-    border-bottom: 1px solid #2a2a3d;
-    margin-bottom: 18px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-.hdw-title-dna  { font-size: 26px; line-height: 1; }
-.hdw-title-text {
-    color: #f5c842;
-    font-family: 'Space Mono', monospace;
-    font-size: 32px;
-    font-weight: bold;
-    letter-spacing: 0.06em;
-}
-.hdw-title-badge {
-    margin-left: 10px;
-    font-family: 'Space Mono', monospace;
-    font-size: 11px;
-    color: #f57c5c;
-    background: #f57c5c14;
-    border: 1px solid #f57c5c44;
-    border-radius: 4px;
-    padding: 2px 8px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-}
-
-/* ── Auto-expanding textarea (all textareas on this page) ─────────── */
 .stTextArea textarea {
     overflow-y: hidden !important;
     resize: none !important;
     min-height: 56px;
     transition: height 0.1s ease;
 }
-
-/* ── Drop zone ───────────────────────────────────────────────────── */
 .img-drop-zone {
     border: 2px dashed #252538;
     border-radius: 12px;
@@ -223,8 +179,6 @@ PAGE_CSS = """
     margin-top: 6px;
     font-family: 'Space Mono', monospace;
 }
-
-/* ── Image card ──────────────────────────────────────────────────── */
 .scan-card {
     border: 1px solid #1c1c2e;
     border-radius: 10px;
@@ -240,25 +194,16 @@ PAGE_CSS = """
     text-transform: uppercase;
     margin-bottom: 10px;
 }
-
-/* ── Hide Streamlit's default textarea label when we use our own ─── */
-.no-label > label { display: none !important; }
-
 </style>
 """
 
-# ---------------------------------------------------------------------------
-# JavaScript — auto-expanding textareas + Ctrl+V paste + drag-drop
-# ---------------------------------------------------------------------------
 AUTO_EXPAND_AND_PASTE_JS = """
 <script>
 (function() {
-    // ── 1. Auto-expand all textareas ───────────────────────────────────────
     function autoExpand(ta) {
         ta.style.height = 'auto';
         ta.style.height = (ta.scrollHeight) + 'px';
     }
-
     function attachAutoExpand(ta) {
         if (ta.__hdwExpand) return;
         ta.__hdwExpand = true;
@@ -266,71 +211,39 @@ AUTO_EXPAND_AND_PASTE_JS = """
         ta.style.resize = 'none';
         autoExpand(ta);
         ta.addEventListener('input', function() { autoExpand(ta); });
-        const orig = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
-        if (orig && orig.set) {
-            const origSet = orig.set;
-            Object.defineProperty(ta, 'value', {
-                set: function(v) {
-                    origSet.call(this, v);
-                    setTimeout(() => autoExpand(ta), 10);
-                },
-                get: function() { return orig.get.call(this); }
-            });
-        }
     }
-
     function scanAndAttach() {
         document.querySelectorAll('textarea').forEach(attachAutoExpand);
     }
-
     scanAndAttach();
-    const taObserver = new MutationObserver(scanAndAttach);
-    taObserver.observe(document.body, { childList: true, subtree: true });
+    new MutationObserver(scanAndAttach).observe(document.body, { childList: true, subtree: true });
 
-    // ── 2. Ctrl+V paste → relay into hidden text_input ─────────────────────
     if (window.__hdwPasteReady) return;
     window.__hdwPasteReady = true;
-
     const RELAY_PLACEHOLDER = '__HDW_PASTE_RELAY__';
 
     function findRelayInput() {
-        var docs = [document];
-        try { if (window.parent && window.parent.document !== document) docs.push(window.parent.document); } catch(e) {}
-        for (var d of docs) {
-            var inputs = d.querySelectorAll('input[type="text"], input:not([type])');
-            for (var inp of inputs) {
+        for (var d of [document]) {
+            for (var inp of d.querySelectorAll('input[type="text"], input:not([type])')) {
                 if (inp.placeholder === RELAY_PLACEHOLDER) return inp;
             }
         }
         return null;
     }
-
     function sendToRelay(base64Data, mimeType) {
         var relay = findRelayInput();
-        if (!relay) {
-            try {
-                sessionStorage.setItem('hdw_paste_pending', JSON.stringify({
-                    data: base64Data, mime: mimeType, ts: Date.now()
-                }));
-            } catch(e) {}
-            return;
-        }
+        if (!relay) return;
         var payload = '__HDW__' + JSON.stringify({ data: base64Data, mime: mimeType });
         var setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
         setter.call(relay, payload);
         relay.dispatchEvent(new Event('input', { bubbles: true }));
     }
-
     function handleImageFile(file) {
         if (!file || !file.type.startsWith('image/')) return;
         var reader = new FileReader();
-        reader.onload = function(e) {
-            sendToRelay(e.target.result.split(',')[1], file.type);
-        };
+        reader.onload = function(e) { sendToRelay(e.target.result.split(',')[1], file.type); };
         reader.readAsDataURL(file);
     }
-
-    // Ctrl+V / Cmd+V
     window.addEventListener('paste', function(e) {
         var items = e.clipboardData && e.clipboardData.items;
         if (!items) return;
@@ -342,151 +255,130 @@ AUTO_EXPAND_AND_PASTE_JS = """
             }
         }
     }, true);
-
-    // Drag-and-drop (window level)
     window.addEventListener('dragover', function(e) { e.preventDefault(); }, true);
     window.addEventListener('drop', function(e) {
         e.preventDefault();
         var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
         if (f && f.type.startsWith('image/')) handleImageFile(f);
     }, true);
-
-    // ── 3. Check sessionStorage fallback on load ───────────────────────────
-    try {
-        var pending = sessionStorage.getItem('hdw_paste_pending');
-        if (pending) {
-            var obj = JSON.parse(pending);
-            if (Date.now() - obj.ts < 10000) {
-                sessionStorage.removeItem('hdw_paste_pending');
-                setTimeout(function() { sendToRelay(obj.data, obj.mime); }, 500);
-            } else {
-                sessionStorage.removeItem('hdw_paste_pending');
-            }
-        }
-    } catch(e) {}
-
 })();
 </script>
 """
 
 # ---------------------------------------------------------------------------
-# AI analysis helper
+# AI helpers
 # ---------------------------------------------------------------------------
-def _analyse_image(
-    image_bytes: bytes,
-    mime_type: str,
-    modality: str,
-    notes: str,
-    global_context: str = "",
-) -> str:
+def _analyse_image(image_bytes, mime_type, modality, notes, global_context=""):
     _add_log_safe(f"IMAGING:analyse:{modality}")
-
-    extra = ""
-    if global_context.strip():
-        extra = f"\n\nAdditional clinical context from referring doctor:\n{global_context.strip()}"
-
+    extra = f"\n\nClinical context:\n{global_context.strip()}" if global_context.strip() else ""
     prompt = (
-        f"Please analyse this medical image and provide a structured radiology report.\n\n"
-        f"Imaging modality: {modality}\n"
-        f"Clinical notes: {notes if notes else 'None provided'}"
-        f"{extra}\n\n"
-        f"Provide a complete structured report as instructed."
+        f"Analyse this medical image/report and provide a structured clinical report.\n\n"
+        f"Modality/Type: {modality}\nClinical notes: {notes or 'None'}{extra}\n\n"
+        f"Provide a complete structured report. Accepted file types include JPG, JPEG, PNG, PDF, DICOM."
     )
-
     try:
         import google.generativeai as genai
         import PIL.Image as PILImage
-
         api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         if not api_key:
             raise ValueError("No API key")
-
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel("gemini-1.5-flash")
         pil_img = PILImage.open(io.BytesIO(image_bytes))
-        response = model.generate_content(
-            [IMAGING_SYSTEM_PROMPT + "\n\n" + prompt, pil_img]
-        )
-        return response.text
-
+        return model.generate_content([IMAGING_SYSTEM_PROMPT + "\n\n" + prompt, pil_img]).text
     except Exception:
         if _HAS_GEMINI_CHAT:
             try:
-                return _gemini_chat(
-                    prompt=prompt,
-                    system_prompt=IMAGING_SYSTEM_PROMPT,
-                    offline_fallback=OFFLINE_REPORT,
-                )
+                return _gemini_chat(prompt=prompt, system_prompt=IMAGING_SYSTEM_PROMPT,
+                                    offline_fallback=OFFLINE_REPORT)
             except Exception:
                 pass
-        return OFFLINE_REPORT
+    return OFFLINE_REPORT
 
 
-def _chat_with_imaging_context(user_msg: str, global_context: str) -> str:
-    """Run a chat query in the context of the imaging page."""
+def _chat_with_imaging_context(user_msg, global_context):
     _add_log_safe(f"IMAGING:chat:{user_msg[:60]}")
-
-    system = (
-        IMAGING_SYSTEM_PROMPT
-        + "\n\nYou are also a clinical assistant. "
-        "Answer questions about imaging findings, radiology concepts, clinical risk, "
-        "and any uploaded scan context concisely and clearly."
-    )
-
+    system = IMAGING_SYSTEM_PROMPT + "\n\nAlso act as a clinical assistant for imaging questions."
     queue = st.session_state.get("img_queue", [])
-    context_block = ""
+    context = ""
     if global_context.strip():
-        context_block += f"\n\nClinical context from doctor:\n{global_context.strip()}"
+        context += f"\n\nClinical context:\n{global_context.strip()}"
     if queue:
-        names = ", ".join(e["name"] for e in queue)
-        context_block += f"\n\nCurrently queued scans: {names}"
-
-    prompt = user_msg + context_block
-
+        context += f"\n\nQueued scans: {', '.join(e['name'] for e in queue)}"
     if _HAS_GEMINI_CHAT:
         try:
-            return _gemini_chat(
-                prompt=prompt,
-                system_prompt=system,
-                offline_fallback=(
-                    "*(Offline simulation)* I can see your query. "
-                    "Connect a live API key to receive a real AI response."
-                ),
-            )
+            return _gemini_chat(prompt=user_msg + context, system_prompt=system,
+                                offline_fallback="*(Offline)* Connect API key for live responses.")
         except Exception:
             pass
-
-    return (
-        "*(Offline simulation)* Query received. "
-        "Connect a live Gemini API key for real imaging chat responses."
-    )
+    return "*(Offline simulation)* Connect a live Gemini API key for real responses."
 
 
 # ---------------------------------------------------------------------------
-# Session-state helpers
+# Session state
 # ---------------------------------------------------------------------------
+# Folder where scans are persisted on disk
+SCAN_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "scans")
+
+# Mime type map for common extensions
+_MIME_MAP = {
+    "jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+    "webp": "image/webp", "bmp": "image/bmp", "tiff": "image/tiff",
+    "tif": "image/tiff", "dcm": "application/dicom",
+}
+
+def _load_saved_scans() -> list:
+    """Read all files from data/scans/ and return as queue entries."""
+    entries = []
+    if not os.path.isdir(SCAN_DIR):
+        return entries
+    for fname in sorted(os.listdir(SCAN_DIR)):
+        fpath = os.path.join(SCAN_DIR, fname)
+        if not os.path.isfile(fpath):
+            continue
+        try:
+            with open(fpath, "rb") as f:
+                img_bytes = f.read()
+            ext = fname.rsplit(".", 1)[-1].lower() if "." in fname else "jpg"
+            mime = _MIME_MAP.get(ext, "image/jpeg")
+            # Try to recover modality from filename prefix (format: MODALITY__origname)
+            if "__" in fname:
+                modality_raw = fname.split("__")[0].replace("_", " ").replace("-", "/")
+            else:
+                modality_raw = "Blood Test Report"
+            entries.append({
+                "bytes": img_bytes, "mime": mime, "name": fname,
+                "modality": modality_raw, "notes": "", "report": None,
+                "saved_path": fpath, "chat": [],
+            })
+        except Exception:
+            continue
+    return entries
+
+
 def _init_state():
-    if "img_queue" not in st.session_state:
+    for key, default in [
+        ("img_global_notes", ""),
+        ("img_chat_history", []),
+        ("img_chat_sug_clicked", ""),
+        ("img_scans_loaded", False),
+    ]:
+        if key not in st.session_state:
+            st.session_state[key] = default
+    # Load saved scans from disk on first run of each browser session
+    if not st.session_state.img_scans_loaded:
+        st.session_state.img_queue = _load_saved_scans()
+        st.session_state.img_scans_loaded = True
+    elif "img_queue" not in st.session_state:
         st.session_state.img_queue = []
-    if "img_global_notes" not in st.session_state:
-        st.session_state.img_global_notes = ""
-    if "img_chat_history" not in st.session_state:
-        st.session_state.img_chat_history = []
-    if "img_chat_sug_clicked" not in st.session_state:
-        st.session_state.img_chat_sug_clicked = ""
 
 
-def _queue_add(image_bytes: bytes, mime_type: str, name: str) -> bool:
+def _queue_add(image_bytes, mime_type, name):
     digest = hashlib.md5(image_bytes).hexdigest()
-    existing = {hashlib.md5(e["bytes"]).hexdigest() for e in st.session_state.img_queue}
-    if digest not in existing:
+    if digest not in {hashlib.md5(e["bytes"]).hexdigest() for e in st.session_state.img_queue}:
         st.session_state.img_queue.append({
-            "bytes":    image_bytes,
-            "mime":     mime_type,
-            "name":     name,
-            "modality": "Chest X-Ray",
-            "notes":    "",
-            "report":   None,
+            "bytes": image_bytes, "mime": mime_type, "name": name,
+            "modality": "Blood Test Report", "notes": "", "report": None,
         })
         return True
     return False
@@ -497,108 +389,73 @@ def _queue_add(image_bytes: bytes, mime_type: str, name: str) -> bool:
 # ---------------------------------------------------------------------------
 def render() -> None:
     _init_state()
-
-    # ── CSS ──────────────────────────────────────────────────────────────────
     st.markdown(PAGE_CSS, unsafe_allow_html=True)
 
-    # ── STICKY HEADER ────────────────────────────────────────────────────────
-    st.markdown(
-        """
-        <div class="hdw-sticky-title">
-            <span class="hdw-title-dna">🧬</span>
-            <span class="hdw-title-text">🤖&nbsp;HEALTH DIGITAL WORKFORCE</span>
-            <span class="hdw-title-badge">🩻&nbsp;MediSync Imaging</span>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    # ── Title ─────────────────────────────────────────────────────────────────
+    st.markdown("# 🤖 Health Digital Workforce")
+    st.caption("🩻 MediSync Imaging · AI-powered radiology & clinical report analysis")
+    st.divider()
 
-    # ── DROP ZONE — directly under the title (3 rectangles removed) ──────────
-    st.markdown(
-        """
-        <div class="img-drop-zone">
-            <div class="dz-icon">🩻</div>
-            <div class="dz-label">
-                Press&nbsp;<span class="dz-kbd">Ctrl+V</span>&nbsp;to paste
-                &nbsp;·&nbsp; drag &amp; drop an image anywhere
-                &nbsp;·&nbsp; or use the uploader below
-            </div>
-            <div class="dz-hint">PNG &nbsp;·&nbsp; JPG &nbsp;·&nbsp; WEBP &nbsp;·&nbsp; BMP &nbsp;·&nbsp; TIFF &nbsp;·&nbsp; DICOM</div>
+    # ── Drop zone ─────────────────────────────────────────────────────────────
+    st.markdown("""
+    <div class="img-drop-zone">
+        <div class="dz-icon">🩻</div>
+        <div class="dz-label">
+            Press&nbsp;<span class="dz-kbd">Ctrl+V</span>&nbsp;to paste
+            &nbsp;·&nbsp; drag &amp; drop anywhere
+            &nbsp;·&nbsp; or use the uploader below
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
+        <div class="dz-hint">JPG · PNG · WEBP · BMP · TIFF · DICOM</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # ── FILE UPLOADER ─────────────────────────────────────────────────────────
+    # ── File uploader ─────────────────────────────────────────────────────────
     uploaded_files = st.file_uploader(
-        "➕  Add scan images from your PC (click or drag files here)",
+        "➕ Add scan images or reports from your device",
         type=["png", "jpg", "jpeg", "webp", "bmp", "tiff", "dcm"],
         accept_multiple_files=True,
         key="img_file_uploader",
-        help="Supports PNG, JPG, WEBP, BMP, TIFF, DICOM. "
-             "You can also paste with Ctrl+V or drag-and-drop.",
+        help="Supports JPG, JPEG, PNG, WEBP, BMP, TIFF, DICOM. Also paste with Ctrl+V or drag-and-drop.",
     )
     if uploaded_files:
-        added_any = False
-        for f in uploaded_files:
-            if _queue_add(f.read(), f.type or "image/jpeg", f.name):
-                added_any = True
-        if added_any:
+        if any(_queue_add(f.read(), f.type or "image/jpeg", f.name) for f in uploaded_files):
             st.rerun()
 
-    # ── PASTE RELAY — invisible, JS writes base64 image payload here ─────────
-    # Hidden via CSS so it never renders as a visible box.
+    # ── Paste relay (hidden) ──────────────────────────────────────────────────
     st.markdown(
-        "<style>"
-        "div[data-testid='stTextInput']:has(input[placeholder='__HDW_PASTE_RELAY__']),"
+        "<style>div[data-testid='stTextInput']:has(input[placeholder='__HDW_PASTE_RELAY__']),"
         "div[data-testid='stTextInput']:has(input[placeholder='__HDW_PASTE_RELAY__']) * "
         "{ display:none !important; height:0 !important; margin:0 !important; padding:0 !important; }"
         "</style>",
         unsafe_allow_html=True,
     )
     paste_val = st.text_input(
-        label="paste_relay",
-        label_visibility="collapsed",
-        value="",
-        placeholder="__HDW_PASTE_RELAY__",
-        key="img_paste_relay_input",
+        label="paste_relay", label_visibility="collapsed",
+        value="", placeholder="__HDW_PASTE_RELAY__", key="img_paste_relay_input",
     )
     if paste_val and paste_val.startswith("__HDW__"):
         try:
-            raw    = paste_val[len("__HDW__"):]
-            payload = json.loads(raw)
-            img_b  = base64.b64decode(payload["data"])
-            mime   = payload.get("mime", "image/png")
-            ext    = mime.split("/")[-1].split(";")[0]
-            added  = _queue_add(img_b, mime, f"pasted_image.{ext}")
+            payload = json.loads(paste_val[len("__HDW__"):])
+            img_b = base64.b64decode(payload["data"])
+            mime = payload.get("mime", "image/png")
+            ext = mime.split("/")[-1].split(";")[0]
+            added = _queue_add(img_b, mime, f"pasted_image.{ext}")
             st.session_state["img_paste_relay_input"] = ""
             if added:
                 st.rerun()
         except Exception:
             st.session_state["img_paste_relay_input"] = ""
 
-    # ── JS (auto-expand + Ctrl+V paste + drag-drop) ───────────────────────────
     st.markdown(AUTO_EXPAND_AND_PASTE_JS, unsafe_allow_html=True)
 
-    # =========================================================================
-    # IMAGING CHAT WINDOW
-    # Uses the exact same native Streamlit components as the working blue-box
-    # chat on the main app page (localhost:8501):
-    #   • st.button() suggested-ops in 2-col grid
-    #   • st.chat_message() for history bubbles
-    #   • st.chat_input() for the sticky bottom input bar
-    # No custom HTML, no JS relay — pure Streamlit, guaranteed to work.
-    # =========================================================================
-
+    # ── Chat section ──────────────────────────────────────────────────────────
     st.divider()
+    st.markdown("### 💬 Imaging Assistant")
 
-    # ── Chat history — native st.chat_message() ───────────────────────────────
-    # Rendered FIRST so responses appear above the suggested ops and input bar.
     for msg in st.session_state.img_chat_history:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    # ── Suggested ops header — always directly above the chat input ───────────
     st.markdown(
         "<p style='font-family:\"Space Mono\",monospace;font-size:9px;"
         "color:#3a3a5a;letter-spacing:0.18em;text-transform:uppercase;"
@@ -606,81 +463,53 @@ def render() -> None:
         unsafe_allow_html=True,
     )
 
-    # ── Suggested ops — native st.button() in 2-col grid ─────────────────────
-    if "img_chat_sug_clicked" not in st.session_state:
-        st.session_state.img_chat_sug_clicked = ""
-
-    for row_start in range(0, len(IMAGING_SUGGESTED_OPS), 2):
-        pair = IMAGING_SUGGESTED_OPS[row_start: row_start + 2]
+    for op_idx in range(0, len(IMAGING_SUGGESTED_OPS), 2):
+        pair = IMAGING_SUGGESTED_OPS[op_idx: op_idx + 2]
         cols = st.columns(len(pair))
-        for col, (btn_label, btn_prompt) in zip(cols, pair):
+        for col_idx, (col, (btn_label, btn_prompt)) in enumerate(zip(cols, pair)):
             with col:
-                if st.button(
-                    btn_label,
-                    key=f"img_sug_{row_start}_{btn_label[:20]}",
-                    use_container_width=True,
-                ):
+                if st.button(btn_label, key=f"img_sug_{op_idx + col_idx}",
+                             use_container_width=True):
                     st.session_state.img_chat_sug_clicked = btn_prompt
                     st.rerun()
 
     st.write("")
 
-    # ── Chat input — native st.chat_input() — same component as main chat ─────
-    # st.chat_input() always sticks to the bottom of the page, so the visual
-    # order on screen is: history → suggested ops buttons → chat input bar.
     prefill = st.session_state.get("img_chat_sug_clicked", "") or ""
     if prefill:
         st.session_state["img_chat_sug_clicked"] = ""
 
     user_input = st.chat_input(
-        placeholder=(
-            "Enter overall clinical context here — e.g. analyse ECG heartbeat image "
-            "carefully to see if there is any potential earlier heart failure risk or "
-            "stroke sign that is not mentioned on any of the attached Cardiac Vascular "
-            "medical reports… · This note is included with every scan's parse request."
-        ),
+        placeholder="Ask about imaging findings, blood test results, clinical risk…",
         key="img_chat_input_widget",
     )
-
-    _pending_msg = user_input or prefill or ""
-
-    if _pending_msg:
+    pending = user_input or prefill or ""
+    if pending:
         with st.chat_message("user"):
-            st.markdown(_pending_msg)
-        st.session_state.img_chat_history.append(
-            {"role": "user", "content": _pending_msg}
-        )
+            st.markdown(pending)
+        st.session_state.img_chat_history.append({"role": "user", "content": pending})
         with st.chat_message("assistant"):
             with st.spinner("🤖 Analysing…"):
-                reply = _chat_with_imaging_context(
-                    _pending_msg, st.session_state.img_global_notes
-                )
+                reply = _chat_with_imaging_context(pending, st.session_state.img_global_notes)
             st.markdown(reply)
-        st.session_state.img_chat_history.append(
-            {"role": "assistant", "content": reply}
-        )
+        st.session_state.img_chat_history.append({"role": "assistant", "content": reply})
         st.rerun()
 
-    # ── IMAGE QUEUE ───────────────────────────────────────────────────────────
+    # ── Image queue ───────────────────────────────────────────────────────────
     queue = st.session_state.img_queue
 
     if not queue:
         st.divider()
         st.markdown(
-            "<div style='text-align:center; color:#2a2a40; padding:24px 0 12px;"
-            "font-family:Space Mono,monospace; font-size:11px; letter-spacing:0.12em;'>"
-            "NO SCANS QUEUED — PASTE · DROP · OR UPLOAD TO BEGIN"
-            "</div>",
+            "<div style='text-align:center;color:#2a2a40;padding:24px 0 12px;"
+            "font-family:Space Mono,monospace;font-size:11px;letter-spacing:0.12em;'>"
+            "NO SCANS QUEUED — PASTE · DROP · OR UPLOAD TO BEGIN</div>",
             unsafe_allow_html=True,
         )
-        tile_cols = st.columns(4)
-        tiles = [
-            ("🫁", "Chest X-Ray\nCT Chest"),
-            ("🧠", "CT Head\nMRI Brain"),
-            ("🫀", "Cardiac Echo\nECG Tracing"),
-            ("🔬", "Ultrasound\nAny region"),
-        ]
-        for col, (icon, label) in zip(tile_cols, tiles):
+        for col, (icon, label) in zip(st.columns(4), [
+            ("🫁", "Chest X-Ray\nCT Chest"), ("🧠", "CT Head\nMRI Brain"),
+            ("🫀", "Cardiac Echo\nECG Tracing"), ("🩸", "Blood Test\nReport"),
+        ]):
             with col:
                 st.markdown(
                     f"<div style='text-align:center;background:#0e0e1a;"
@@ -693,7 +522,7 @@ def render() -> None:
                 )
         return
 
-    # Queue header row
+    # ── Queue header ──────────────────────────────────────────────────────────
     st.divider()
     hdr_col, clr_col = st.columns([5, 1])
     with hdr_col:
@@ -712,38 +541,65 @@ def render() -> None:
 
     # ── Per-image cards ───────────────────────────────────────────────────────
     for idx, entry in enumerate(queue):
-
-        # Ensure each scan has its own per-scan chat history
         if "chat" not in entry:
             entry["chat"] = []
 
         st.markdown("<div class='scan-card'>", unsafe_allow_html=True)
 
-        # ── Card header: name + modality + remove ─────────────────────────────
-        hdr_left, hdr_mid, hdr_right = st.columns([3, 3, 1])
-        with hdr_left:
+        # ── Card header: name | modality (narrow) | Save | Delete ─────────────
+        # Columns: [name 3] [modality 2.5] [Save 1] [Delete 1]
+        col_name, col_mod, col_save, col_del = st.columns([3, 2.5, 1, 1])
+
+        with col_name:
             st.markdown(
-                f"<div class='scan-card-hdr' style='margin-bottom:0;padding-top:6px;'>"
-                f"SCAN {idx + 1} &nbsp;·&nbsp; {entry['name']}</div>",
+                f"<div class='scan-card-hdr' style='padding-top:8px;'>"
+                f"SCAN {idx + 1} · {entry['name']}</div>",
                 unsafe_allow_html=True,
             )
-        with hdr_mid:
+
+        with col_mod:
             chosen_modality = st.selectbox(
                 "Modality",
                 MODALITY_OPTIONS,
-                index=MODALITY_OPTIONS.index(entry.get("modality", "Chest X-Ray"))
+                index=MODALITY_OPTIONS.index(entry.get("modality", "Blood Test Report"))
                       if entry.get("modality") in MODALITY_OPTIONS else 0,
                 key=f"img_modality_{idx}",
                 label_visibility="collapsed",
             )
             entry["modality"] = chosen_modality
-        with hdr_right:
-            if st.button("✕", key=f"img_del_{idx}", use_container_width=True,
+
+        with col_save:
+            # Save button — writes file to data/scans/ folder on disk
+            already_saved = entry.get("saved_path")
+            save_label = "✅ Saved" if already_saved else "💾 Save"
+            if st.button(save_label, key=f"img_save_{idx}", use_container_width=True,
+                         help="Save this file to data/scans/ folder"):
+                try:
+                    save_dir = os.path.join(
+                        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "data", "scans"
+                    )
+                    os.makedirs(save_dir, exist_ok=True)
+                    safe_modality = chosen_modality.replace("/", "-").replace(" ", "_")
+                    safe_name = entry["name"].replace(" ", "_")
+                    save_filename = f"{safe_modality}__{safe_name}"
+                    save_path = os.path.join(save_dir, save_filename)
+                    with open(save_path, "wb") as fout:
+                        fout.write(entry["bytes"])
+                    entry["saved_path"] = save_path
+                    _add_log_safe(f"SCAN_SAVED:{save_filename}")
+                    st.success(f"✅ Saved to data/scans/{save_filename}")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Save failed: {e}")
+
+        with col_del:
+            if st.button("🗑️ Delete", key=f"img_del_{idx}", use_container_width=True,
                          help="Remove this scan"):
                 st.session_state.img_queue.pop(idx)
                 st.rerun()
 
-        # ── Image preview (full width) ────────────────────────────────────────
+        # ── Image preview ─────────────────────────────────────────────────────
         if entry["name"].lower().endswith(".dcm"):
             st.warning("⚠️ DICOM — cannot render preview. AI will analyse metadata only.")
         else:
@@ -754,22 +610,13 @@ def render() -> None:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
 
-        # ── Per-scan chat input: textarea + send button ───────────────────────
-        # st.chat_input() is page-level only (one per page), so we use
-        # st.text_area + st.button here — same AI function, same result.
-        # _analyse_image() is called so the AI actually sees the image bytes.
+        # ── Per-scan chat input ───────────────────────────────────────────────
         scan_input_col, scan_send_col = st.columns([11, 1])
         with scan_input_col:
             scan_msg = st.text_area(
-                label=f"scan_chat_{idx}",
-                label_visibility="collapsed",
-                value="",
-                placeholder=(
-                    "Ask about this scan — e.g. analyse findings, flag risks, "
-                    "suggest follow-up, compare with previous reports…"
-                ),
-                height=68,
-                key=f"img_scan_input_{idx}",
+                label=f"scan_chat_{idx}", label_visibility="collapsed", value="",
+                placeholder="Ask about this scan — findings, risks, follow-up recommendations…",
+                height=68, key=f"img_scan_input_{idx}",
             )
         with scan_send_col:
             st.markdown("<div style='padding-top:28px'>", unsafe_allow_html=True)
@@ -777,34 +624,30 @@ def render() -> None:
                                   help="Send", use_container_width=True)
             st.markdown("</div>", unsafe_allow_html=True)
 
-        # ── Process per-scan message ──────────────────────────────────────────
         if scan_send and scan_msg and scan_msg.strip():
             user_text = scan_msg.strip()
             entry["chat"].append({"role": "user", "content": user_text})
             with st.spinner("🤖 Analysing scan…"):
                 reply = _analyse_image(
-                    entry["bytes"],
-                    entry["mime"],
-                    chosen_modality,
+                    entry["bytes"], entry["mime"], chosen_modality,
                     notes=user_text,
                     global_context=st.session_state.img_global_notes,
                 )
             entry["chat"].append({"role": "assistant", "content": reply})
             st.rerun()
 
-        # ── Download latest reply as report ───────────────────────────────────
-        assistant_replies = [m["content"] for m in entry["chat"] if m["role"] == "assistant"]
-        if assistant_replies:
+        # ── Download report ───────────────────────────────────────────────────
+        replies = [m["content"] for m in entry["chat"] if m["role"] == "assistant"]
+        if replies:
             st.download_button(
-                label="⬇️ Download Latest Report (.md)",
-                data=assistant_replies[-1],
-                file_name=f"report_{entry['name']}.md",
-                mime="text/markdown",
+                "⬇️ Download Latest Report (.md)", data=replies[-1],
+                file_name=f"report_{entry['name']}.md", mime="text/markdown",
                 key=f"img_dl_{idx}",
             )
 
         st.markdown("</div>", unsafe_allow_html=True)
         st.write("")
+
 
 # ---------------------------------------------------------------------------
 # Multipage entrypoint
