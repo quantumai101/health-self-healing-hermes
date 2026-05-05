@@ -33,13 +33,13 @@ def _render_inner() -> None:
 .hdw-sticky-title span {
     color: #f5c842;
     font-family: 'Space Mono', monospace;
-    font-size: 18px;
+    font-size: 32px;
     font-weight: bold;
     letter-spacing: 0.04em;
 }
 </style>
 <div class="hdw-sticky-title">
-    <span>&#9678; HEALTH DIGITAL WORKFORCE CHAT</span>
+    <span>🤖 HEALTH DIGITAL WORKFORCE</span>
 </div>
 """
     st.markdown(STICKY_TITLE_CSS, unsafe_allow_html=True)

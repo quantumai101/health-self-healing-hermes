@@ -58,7 +58,7 @@ GLOBAL_STICKY_CSS = """
 .hdw-sticky-title span {
     color: #f5c842;
     font-family: 'Space Mono', monospace;
-    font-size: 18px;
+    font-size: 32px;
     font-weight: bold;
     letter-spacing: 0.04em;
 }

@@ -164,7 +164,7 @@ PAGE_CSS = """
 .hdw-title-text {
     color: #f5c842;
     font-family: 'Space Mono', monospace;
-    font-size: 22px;
+    font-size: 32px;
     font-weight: bold;
     letter-spacing: 0.06em;
 }
@@ -506,7 +506,7 @@ def render() -> None:
         """
         <div class="hdw-sticky-title">
             <span class="hdw-title-dna">🧬</span>
-            <span class="hdw-title-text">&#9678;&nbsp;HEALTH DIGITAL WORKFORCE CHAT</span>
+            <span class="hdw-title-text">🤖&nbsp;HEALTH DIGITAL WORKFORCE</span>
             <span class="hdw-title-badge">🩻&nbsp;MediSync Imaging</span>
         </div>
         """,
