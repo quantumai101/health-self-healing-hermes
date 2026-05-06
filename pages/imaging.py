@@ -495,6 +495,107 @@ def render() -> None:
         st.session_state.img_chat_history.append({"role": "assistant", "content": reply})
         st.rerun()
 
+    # ── Pinned AI Demo Examples ───────────────────────────────────────────────
+    st.divider()
+    st.markdown(
+        "<p style=\'font-family:\"Space Mono\",monospace;font-size:9px;"
+        "color:#3a3a5a;letter-spacing:0.18em;text-transform:uppercase;"
+        "margin:4px 0 8px 0;\'>📌 PINNED AI ASSISTANT DEMO EXAMPLES</p>",
+        unsafe_allow_html=True,
+    )
+
+    with st.expander("💬 Example 1 — Vascular Diagnostic Analysis (Westmead Hospital)", expanded=False):
+        st.markdown("""
+**🧑‍⚕️ Patient Question:**
+> *"You are the expert of Westmead Hospital Vascular Consultant Clinic — facing the attached medical reports, how can you find the true reasons why the patient experienced consistent left chest tightness and occasional sharp pain for a few minutes over the past two years?"*
+
+---
+
+**🤖 AI Imaging Assistant Response:**
+
+As a specialist AI assistant, I have reviewed all queued reports. To find the true reason, we must integrate the **anatomical** findings (CTCA, Carotid Doppler) with **functional** findings (Stress Test, ECG) and **metabolic** risk factors (Blood tests).
+
+**1. The "Normal" Findings — Ruling Out the Obvious**
+- **CTCA (20 April 2026):** Calcium Score 0, CAD-RADS 0 — no plaque or narrowing. Classic coronary artery disease is **ruled out**.
+- **Carotid & Peripheral Dopplers:** No significant stenosis or DVT — systemic large-vessel atherosclerosis **ruled out**.
+- **Echocardiogram:** Normal pumping function (EF 64.2%) — structural failure **ruled out**.
+
+**2. The "Hidden" Clues**
+- **Mild Diastolic Dysfunction:** Impaired relaxation noted on Echo — linked to **Microvascular Dysfunction**.
+- **Mildly Dilated Ascending Aorta (3.8 cm):** Suggests long-term blood pressure stress on the main artery.
+- **High LDL (4.8 mmol/L):** Drives inflammation and vascular tone issues even with clear arteries.
+
+**3. Potential True Reasons**
+
+| Suspect | Mechanism | Evidence |
+|---|---|---|
+| **Coronary Microvascular Dysfunction (CMD)** | Microscopic vessels don't dilate — invisible on CTCA | Diastolic dysfunction + clear CTCA |
+| **Vasospastic Angina (Prinzmetal)** | Artery spasms despite clear anatomy | Sharp brief episodes + normal anatomy |
+| **Oesophageal Spasm / GERD** | Mimics cardiac tightness perfectly | Needs gastro correlation |
+| **Musculoskeletal (Costochondritis)** | Sharp pain reproducible by touch or movement | Needs clinical examination |
+
+**4. Recommended Next Steps**
+1. **Cardiac Stress MRI or PET Scan** — evaluates microvascular blood flow under stress
+2. **24-Hour Holter Monitor** — correlates pain episodes with rhythm disturbances
+3. **Aggressive Lipid Management** — statin therapy targeting LDL below 1.8 mmol/L
+4. **Nitrate Trial** — sublingual GTN relief confirms vascular (spasm/microvascular) origin
+
+**Risk Level:** 🟠 **HIGH** — pending CTCA stenosis grades and Stress Echo wall motion review
+
+> ⚕️ *DISCLAIMER: AI report for clinical support only. All findings must be verified by the attending Vascular Consultant or Cardiologist before any treatment plan.*
+        """)
+
+    with st.expander("💬 Example 2 — Questions to Ask at Your Westmead Vascular Clinic Appointment", expanded=False):
+        st.markdown("""
+**🧑‍⚕️ Patient Question:**
+> *"Can you draft a list of questions I should ask during the appointment with Westmead Hospital Vascular Consultant Clinic experts?"*
+
+---
+
+**🤖 AI Imaging Assistant Response:**
+
+**1. Regarding the Carotid Doppler (Scan 05)**
+- *"What is the exact percentage of stenosis in my carotid arteries?"*
+- *"Is the plaque 'stable' or 'unstable/soft'? How does this affect my stroke or TIA risk?"*
+- *"Do you recommend surgical intervention (endarterectomy/stenting) or medical management?"*
+
+**2. Regarding the DVT Ultrasound (Scan 06)**
+- *"Was a DVT clot found, and if so, is it occlusive (completely blocking the vein)?"*
+- *"How long will I need blood thinners, and what is the Pulmonary Embolism risk?"*
+- *"What red flags in my leg require an emergency return to Westmead?"*
+
+**3. Regarding CTCA & Heart Health (Scans 01–04)**
+- *"My CTCA shows CAD-RADS 0 — does clear coronary anatomy change the vascular management approach?"*
+- *"Given my Stress Test and ECG, am I low risk for any vascular procedures?"*
+- *"Is there evidence of systemic atherosclerosis across all these scans?"*
+
+**4. Medication & Risk Factor Management (Scan 07)**
+- *"My LDL is 4.8 mmol/L — is this low enough for my vascular profile? What is the target?"*
+- *"Should I be on dual antiplatelet therapy (Aspirin + Clopidogrel) or a single agent?"*
+- *"How do my blood test results impact the healing of my veins and arteries?"*
+
+**5. Future Planning & Lifestyle**
+- *"How often will I need repeat Carotid or DVT ultrasounds at Westmead?"*
+- *"Are there exercises I should avoid, or is there a walking program to improve circulation?"*
+- *"If surgery is needed in future, what is the typical recovery time for these vascular procedures?"*
+
+**Summary Table**
+
+| Test | Primary Focus for Vascular Surgeon |
+|---|---|
+| Carotid Doppler | Stroke risk and neck artery intervention need |
+| DVT Ultrasound | Leg vein clots and blood thinner requirements |
+| CTCA (Coronary CT) | Baseline cardiovascular risk before potential surgery |
+| Stress Test / ECG | Heart capacity for vascular disease or surgery |
+| Blood Test | Cholesterol/glucose management to prevent blockages |
+
+**Risk Level:** 🟠 **MODERATE to HIGH** — pending specific stenosis or thrombosis findings
+
+> ⚕️ *DISCLAIMER: For educational preparation only. Present your actual scan reports to the Westmead Vascular team. Only a qualified clinician can interpret results in context of your physical examination and medical history.*
+        """)
+
+    st.divider()
+
     # ── Image queue ───────────────────────────────────────────────────────────
     queue = st.session_state.img_queue
 
