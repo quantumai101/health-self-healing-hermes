@@ -3,6 +3,13 @@ magicEnabled = false
 
 [server]
 runOnSave = true
+headless = true
 
 [browser]
-gatherUsageStats = fa
+gatherUsageStats = false
+
+[client]
+showSidebarNavigation = false
+
+[theme]
+base = "dark"

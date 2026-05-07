@@ -1,3 +1,53 @@
 {
-    "python-envs.defaultEnvManager": "ms-python.python:system"
+    "python-envs.defaultEnvManager": "ms-python.python:system",
+
+    "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+
+    "terminal.integrated.defaultProfile.windows": "PowerShell",
+    "terminal.integrated.profiles.windows": {
+        "PowerShell": {
+            "source": "PowerShell",
+            "args": ["-NoExit", "-Command", "& '.venv\\Scripts\\Activate.ps1'"]
+        }
+    },
+    "terminal.integrated.scrollback": 100000,
+    "terminal.integrated.enablePersistentSessions": true,
+    "terminal.integrated.tabs.enabled": true,
+    "terminal.integrated.tabs.location": "right",
+    "terminal.integrated.tabs.defaultColor": "terminal.ansiGreen",
+    "terminal.integrated.splitCwd": "workspaceRoot",
+
+    "editor.lineNumbers": "on",
+    "editor.wordWrap": "on",
+    "editor.rulers": [88],
+    "editor.formatOnSave": true,
+    "editor.minimap.enabled": true,
+    "editor.bracketPairColorization.enabled": true,
+    "editor.guides.bracketPairs": true,
+    "editor.suggest.showStatusBar": true,
+
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.python",
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true,
+        "editor.wordWrap": "on",
+        "editor.lineNumbers": "on"
+    },
+
+    "[jupyter]": {
+        "editor.wordWrap": "on",
+        "editor.lineNumbers": "on"
+    },
+
+    "notebook.lineNumbers": "on",
+    "notebook.output.wordWrap": true,
+
+    "files.autoSave": "afterDelay",
+    "files.autoSaveDelay": 2000,
+
+    "explorer.confirmDelete": false,
+    "explorer.confirmDragAndDrop": false,
+
+    "extensions.ignoreRecommendations": true,
+    "update.showReleaseNotes": false
 }
