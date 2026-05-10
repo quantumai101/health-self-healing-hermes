@@ -356,7 +356,7 @@ def _load_saved_scans() -> list:
     return entries
 
 
-def _init_state():
+def _init_state(user_id: str = ""):
     for key, default in [
         ("img_global_notes", ""),
         ("img_chat_history", []),
@@ -388,7 +388,11 @@ def _queue_add(image_bytes, mime_type, name):
 # RENDER
 # ---------------------------------------------------------------------------
 def render() -> None:
-    _init_state()
+    from auth.session import require_auth, current_user_data_path
+    user = require_auth()
+    user_id = user["id"]
+    st.session_state.pop(f"img_scans_loaded_{user_id}", None)
+    _init_state(user_id)
     st.markdown(PAGE_CSS, unsafe_allow_html=True)
 
     # ── Title ─────────────────────────────────────────────────────────────────
