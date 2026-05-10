@@ -22,7 +22,8 @@ def _render_inner() -> None:
     st.markdown("# 📰 AI Health News")
     st.caption("Gemini-curated medical and population health news.")
 
-    if st.button("🔄 Fetch Latest Health News", use_container_width=True):
+    # ✅ unique key prevents StreamlitDuplicateElementId on re-render
+    if st.button("🔄 Fetch Latest Health News", use_container_width=True, key="news_fetch_btn"):
         with st.status("🤖 **Thinking and reasoning...** (PROMETHEUS curating news)",
                        expanded=False) as status:
             news = _prometheus.get_health_news()
@@ -33,7 +34,8 @@ def _render_inner() -> None:
     st.subheader("📝 Clinical Note Sentiment Analysis")
     note = st.text_area("Paste a clinical note for sentiment analysis:", height=150,
                         key="news_sentiment_input")
-    if st.button("🧠 Analyse Sentiment", use_container_width=True) and note:
+    # ✅ unique key prevents StreamlitDuplicateElementId on re-render
+    if st.button("🧠 Analyse Sentiment", use_container_width=True, key="news_sentiment_btn") and note:
         with st.status("🤖 **Thinking and reasoning...** (Analysing clinical sentiment)",
                        expanded=False) as status:
             result = _prometheus.analyze_sentiment(note)
@@ -43,6 +45,5 @@ def _render_inner() -> None:
     st.divider()
     render_chat_widget(page_key="news")
 
-
-# Single call — must appear exactly once at module level.
-render()
+# ⚠️ DO NOT call render() here — app.py calls it via page routing.
+# Calling it here caused StreamlitDuplicateElementId errors.

@@ -68,13 +68,16 @@ Must be reviewed by a qualified clinician before any clinical decision.
     raw_text = ""
     source_label = ""
 
+    # Use a session-state-based unique key to prevent duplicate element ID on re-render
+    if "ehr_uploader_key" not in st.session_state:
+        st.session_state["ehr_uploader_key"] = "ehr_file_uploader_0"
+
     with tab_upload:
         st.markdown("#### Upload Medical Record")
-        # ✅ FIX: unique key prevents duplicate-ID crash on re-render
         uploaded_file = st.file_uploader(
             "Accepted formats: PDF, TXT",
             type=["pdf", "txt"],
-            key="ehr_file_uploader_main",
+            key=st.session_state["ehr_uploader_key"],
         )
         if uploaded_file:
             file_type = uploaded_file.name.split(".")[-1].lower()
@@ -136,6 +139,5 @@ Must be reviewed by a qualified clinician before any clinical decision.
 
     render_chat_widget(page_key="ehr_summarizer")
 
-
-# Single call — render() must appear exactly once at module level.
-render()
+# ⚠️ DO NOT call render() here — app.py calls it via page routing.
+# Calling it here caused StreamlitDuplicateElementKey errors.
