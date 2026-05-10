@@ -83,7 +83,8 @@ def _render_inner() -> None:
             annotation_text=label, annotation_position="top",
         )
     fig_bmi.update_layout(margin=dict(l=0, r=0, b=0, t=0), paper_bgcolor="rgba(0,0,0,0)")
-    st.plotly_chart(fig_bmi, use_container_width=True)
+    # ✅ unique key prevents StreamlitDuplicateElementId on re-render
+    st.plotly_chart(fig_bmi, use_container_width=True, key="dashboard_bmi_scatter")
     st.divider()
 
     # ── BP & Glucose side-by-side ────────────────────────────────────────────
@@ -105,7 +106,7 @@ def _render_inner() -> None:
             margin=dict(l=0, r=0, b=0, t=0),
             paper_bgcolor="rgba(0,0,0,0)",
         )
-        st.plotly_chart(fig_bp, use_container_width=True)
+        st.plotly_chart(fig_bp, use_container_width=True, key="dashboard_bp_bar")
 
     with col_right:
         st.subheader("🩸 Fasting Glucose — Diabetes Risk")
@@ -121,7 +122,7 @@ def _render_inner() -> None:
             color_discrete_map=GLUCOSE_COLORS, template="plotly_dark",
         )
         fig_gluc.update_layout(margin=dict(l=0, r=0, b=0, t=0), paper_bgcolor="rgba(0,0,0,0)")
-        st.plotly_chart(fig_gluc, use_container_width=True)
+        st.plotly_chart(fig_gluc, use_container_width=True, key="dashboard_gluc_pie")
 
     st.divider()
 
@@ -151,10 +152,7 @@ def _render_inner() -> None:
     )
 
     st.divider()
-
-    # ── AI Chat window (same as EHR Summarizer) ──────────────────────────────
     render_chat_widget(page_key="dashboard")
 
-
-# Single call — must appear exactly once at module level.
-render()
+# ⚠️ DO NOT call render() here — app.py calls it via page routing.
+# Calling it here caused StreamlitDuplicateElementId errors.

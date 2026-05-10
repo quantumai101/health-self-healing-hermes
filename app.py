@@ -97,6 +97,9 @@ load_synthetic_data()
 
 # ---------------------------------------------------------------------------
 # RESTORE SESSION FROM COOKIE — must run every load, before any auth check
+# The cookie manager must be instantiated here so its hidden component
+# renders on every page load (including navigating between pages).
+# Without this, the component disappears and logout happens on refresh.
 # ---------------------------------------------------------------------------
 from auth.session import restore_session_from_cookie
 restore_session_from_cookie()

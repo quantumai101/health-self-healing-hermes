@@ -1,14 +1,13 @@
 """
 pages/login.py — Hermes Login & MFA Setup Page
+MFA is mandatory for all users on every login.
 """
-
-import token
 
 import streamlit as st
 from auth.auth import (
     init_db, create_user, verify_password,
     setup_totp, verify_totp_and_enable, verify_totp_code,
-    create_session
+    create_session, get_user_by_id
 )
 
 
@@ -17,8 +16,9 @@ def render():
 
     st.markdown("""
         <div style="text-align:center; padding: 2rem 0 1rem;">
-            <h1 style="font-size:2rem; font-weight:600;">🛡️ HEALTH HERMES</h1>
-            <p style="color: #888; font-size:1rem;">Your private medical AI assistant</p>
+            <div style="font-size:2.5rem;">🛡️</div>
+            <h1 style="font-size:2rem; font-weight:700; letter-spacing:0.08em;">HEALTH HERMES</h1>
+            <p style="color:#888; font-size:1rem;">Your private medical AI assistant</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -39,12 +39,24 @@ def _login_flow():
         _step_credentials()
     elif step == "mfa":
         _step_mfa()
+    elif step == "force_mfa_setup":
+        _step_force_mfa_setup()
+    elif step == "force_mfa_verify":
+        _step_force_mfa_verify()
 
 
 def _step_credentials():
     with st.form("login_form"):
-        email = st.text_input("Email address", placeholder="you@example.com")
-        password = st.text_input("Password", type="password")
+        email = st.text_input(
+            "Email address",
+            placeholder="you@example.com",
+            autocomplete="off"
+        )
+        password = st.text_input(
+            "Password",
+            type="password",
+            autocomplete="new-password"
+        )
         submitted = st.form_submit_button("Continue →", use_container_width=True)
 
     if submitted:
@@ -55,20 +67,39 @@ def _step_credentials():
         if not user:
             st.error("Invalid email or password.")
             return
+
         st.session_state["pending_user_id"] = user["id"]
+
         if user["mfa_enabled"]:
             st.session_state["login_step"] = "mfa"
             st.rerun()
         else:
-            _finalize_login(user["id"])
+            st.session_state["login_step"] = "force_mfa_setup"
+            st.rerun()
 
 
 def _step_mfa():
+    """Standard MFA verification step on every login."""
     user_id = st.session_state.get("pending_user_id")
-    st.info("🔐 Enter the 6-digit code from your authenticator app (or a backup code).")
+
+    st.markdown("""
+        <div style="background:#1a1a2e;border:1px solid #f5c842;border-radius:10px;
+        padding:1rem 1.2rem;margin-bottom:1rem;">
+            <p style="color:#f5c842;font-weight:700;margin:0;">🔐 Two-Factor Authentication Required</p>
+            <p style="color:#aaa;font-size:0.9rem;margin:0.3rem 0 0;">
+                Open your authenticator app (Microsoft Authenticator, Google Authenticator, or Authy)
+                and enter the 6-digit code shown for <b>Health Hermes</b>.
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
 
     with st.form("mfa_form"):
-        code = st.text_input("Authentication code", max_chars=10, placeholder="123456")
+        code = st.text_input(
+            "6-digit authentication code",
+            max_chars=10,
+            placeholder="123456",
+            help="Enter the code from your authenticator app, or a backup code."
+        )
         col1, col2 = st.columns(2)
         submitted = col1.form_submit_button("Verify →", use_container_width=True)
         back = col2.form_submit_button("← Back", use_container_width=True)
@@ -85,7 +116,83 @@ def _step_mfa():
         if verify_totp_code(user_id, code):
             _finalize_login(user_id)
         else:
-            st.error("Invalid or expired code. Please try again.")
+            st.error("❌ Invalid or expired code. Please try again.")
+            st.caption("Make sure your device clock is synced. Codes refresh every 30 seconds.")
+
+
+def _step_force_mfa_setup():
+    """
+    Shown when an existing user has no MFA set up.
+    Reuses the existing DB secret on refresh to avoid QR mismatch.
+    """
+    import pyotp, qrcode
+    from io import BytesIO
+
+    user_id = st.session_state["pending_user_id"]
+
+    st.warning("🔐 **MFA setup is required** to access Health Hermes.")
+    st.markdown("""
+        For your security, two-factor authentication is **mandatory**.
+        Please scan the QR code below with your authenticator app:
+        - **Microsoft Authenticator** (recommended)
+        - Google Authenticator
+        - Authy
+    """)
+
+    if "totp_setup_data" not in st.session_state:
+        user = get_user_by_id(user_id)
+        if user.get("totp_secret"):
+            # Reuse existing secret — prevents new QR being generated on every refresh
+            totp = pyotp.TOTP(user["totp_secret"])
+            uri = totp.provisioning_uri(name=user["email"], issuer_name="Health Hermes")
+            qr = qrcode.QRCode(box_size=6, border=2)
+            qr.add_data(uri)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+            buf = BytesIO()
+            img.save(buf, format="PNG")
+            st.session_state["totp_setup_data"] = {
+                "secret": user["totp_secret"],
+                "qr_png": buf.getvalue(),
+                "backup_codes": [],
+            }
+        else:
+            # First time — generate a fresh secret and save to DB
+            st.session_state["totp_setup_data"] = setup_totp(user_id)
+
+    data = st.session_state["totp_setup_data"]
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        st.image(data["qr_png"], width=200)
+    with col2:
+        with st.expander("Can't scan? Enter code manually"):
+            st.code(data["secret"], language=None)
+        if data["backup_codes"]:
+            with st.expander("🔑 Save your backup codes"):
+                st.warning("Store these safely — each code can only be used once.")
+                st.code("\n".join(data["backup_codes"]), language=None)
+
+    if st.button("I've scanned it — Continue →", use_container_width=True):
+        st.session_state["login_step"] = "force_mfa_verify"
+        st.rerun()
+
+
+def _step_force_mfa_verify():
+    """Verify the TOTP code after forced MFA setup."""
+    user_id = st.session_state["pending_user_id"]
+
+    st.info("Enter the 6-digit code from your authenticator app to confirm setup.")
+
+    with st.form("force_verify_form"):
+        code = st.text_input("Code from app", max_chars=6, placeholder="123456")
+        submitted = st.form_submit_button("Enable MFA & Sign In →", use_container_width=True)
+
+    if submitted:
+        if verify_totp_and_enable(user_id, code):
+            st.success("✅ MFA enabled! Signing you in...")
+            _finalize_login(user_id)
+        else:
+            st.error("Code didn't match. Make sure your device clock is synced and try again.")
 
 
 # ── Register flow ─────────────────────────────────────────────────────────────
@@ -125,42 +232,52 @@ def _step_register_details():
 
 
 def _step_mfa_setup():
+    """MFA setup during registration — mandatory, no skip option."""
     user_id = st.session_state["pending_user_id"]
-    st.success("✅ Account created! Set up two-factor authentication.")
-    st.markdown("Scan this QR code with **Google Authenticator**, **Authy**, or any TOTP app.")
+
+    st.success("✅ Account created!")
+    st.markdown("""
+        **Set up two-factor authentication** to secure your account.
+        Scan the QR code below with your authenticator app:
+        - **Microsoft Authenticator** (recommended)
+        - Google Authenticator
+        - Authy
+    """)
 
     if "totp_setup_data" not in st.session_state:
         st.session_state["totp_setup_data"] = setup_totp(user_id)
 
     data = st.session_state["totp_setup_data"]
-    st.image(data["qr_png"], width=220)
 
-    with st.expander("Can't scan? Enter code manually"):
-        st.code(data["secret"], language=None)
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        st.image(data["qr_png"], width=200)
+    with col2:
+        with st.expander("Can't scan? Enter code manually"):
+            st.code(data["secret"], language=None)
+        with st.expander("🔑 Save your backup codes (one-time use)"):
+            st.warning("Store these somewhere safe. Each can be used once if you lose your phone.")
+            st.code("\n".join(data["backup_codes"]), language=None)
 
-    with st.expander("🔑 Save your backup codes (one-time use)"):
-        st.warning("Store these somewhere safe. Each can be used once if you lose your phone.")
-        st.code("\n".join(data["backup_codes"]), language=None)
+    st.info("Once scanned, click Continue to verify your setup.")
 
-    col1, col2 = st.columns(2)
-    if col1.button("Continue →", use_container_width=True):
+    if st.button("I've scanned it — Continue →", use_container_width=True):
         st.session_state["register_step"] = "mfa_verify"
         st.rerun()
-    if col2.button("Skip for now", use_container_width=True):
-        _finalize_login(user_id)
 
 
 def _step_mfa_verify():
+    """Verify TOTP code after registration MFA setup."""
     user_id = st.session_state["pending_user_id"]
-    st.info("Enter the 6-digit code from your authenticator to confirm setup.")
+    st.info("Enter the 6-digit code from your authenticator app to confirm setup.")
 
     with st.form("verify_form"):
         code = st.text_input("Code from app", max_chars=6, placeholder="123456")
-        submitted = st.form_submit_button("Enable MFA →", use_container_width=True)
+        submitted = st.form_submit_button("Enable MFA & Sign In →", use_container_width=True)
 
     if submitted:
         if verify_totp_and_enable(user_id, code):
-            st.success("🎉 MFA enabled!")
+            st.success("🎉 MFA enabled! Signing you in...")
             _finalize_login(user_id)
         else:
             st.error("Code didn't match. Make sure your device clock is synced and try again.")
@@ -169,22 +286,20 @@ def _step_mfa_verify():
 # ── Finalize login ────────────────────────────────────────────────────────────
 
 def _finalize_login(user_id: str):
-    from auth.auth import get_user_by_id
     user = get_user_by_id(user_id)
     token = create_session(user_id)
 
-    # ✅ Clear ALL stale imaging/session cache so scans reload fresh from disk
+    # Clear stale imaging cache
     keys_to_clear = [k for k in st.session_state.keys() if k.startswith("img_")]
     for k in keys_to_clear:
         del st.session_state[k]
 
-    # Set auth state
-    # st.session_state["auth_token"] = token
+    # Persist token to cookie + session_state
     from auth.session import persist_login
     persist_login(token)
     st.session_state["auth_user"] = user
 
-    # Clean up login flow keys
+    # Clean up login/register flow keys
     for k in ["register_step", "login_step", "pending_user_id", "totp_setup_data", "show_login"]:
         st.session_state.pop(k, None)
 

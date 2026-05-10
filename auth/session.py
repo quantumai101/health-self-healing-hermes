@@ -1,100 +1,66 @@
 """
 auth/session.py — Session helpers for Hermes Streamlit pages
 
-Fix: auth_token is now persisted in a browser cookie so page refreshes
-don't log the user out. On every load we attempt to restore the token
-from the cookie before require_auth() checks session_state.
+Token persistence strategy:
+- On login: token is stored in st.session_state AND st.query_params
+- On refresh: session_state is wiped but query_params survive → token is
+  restored from query_params back into session_state automatically.
+- On logout: query_params is cleared along with session_state.
+- No third-party cookie library needed — st.query_params is built into Streamlit.
 """
 
 import streamlit as st
 from auth.auth import validate_session, revoke_session, user_data_path
 from pathlib import Path
 
-# ---------------------------------------------------------------------------
-# Cookie manager — pip install extra-streamlit-components
-# ---------------------------------------------------------------------------
-try:
-    import extra_streamlit_components as stx
-    _COOKIES_AVAILABLE = True
-except ImportError:
-    _COOKIES_AVAILABLE = False
-
-_COOKIE_NAME = "hermes_auth_token"
-_COOKIE_MAX_AGE = 60 * 60 * 24 * 7  # 7 days in seconds
-
-
-@st.cache_resource
-def _get_cookie_manager():
-    """
-    Cache the CookieManager so only ONE instance is created per app run.
-    Multiple instances cause Streamlit component conflicts.
-    """
-    return stx.CookieManager(key="hermes_cookie_manager")
-
-
-def _cookie_manager():
-    """Return the cached CookieManager, or None if unavailable."""
-    if not _COOKIES_AVAILABLE:
-        return None
-    return _get_cookie_manager()
+_TOKEN_PARAM = "t"   # short key keeps the URL tidy
 
 
 # ---------------------------------------------------------------------------
-# Public helpers
+# Core persistence — called once at top of app.py every page load
 # ---------------------------------------------------------------------------
 
 def restore_session_from_cookie():
     """
-    Call this ONCE at the very top of app.py, before require_auth().
-
-    If session_state has no auth_token but a valid cookie exists,
-    the token is restored into session_state so the rest of the app
-    behaves as if the user never left.
+    Restore auth_token from query_params into session_state if missing.
+    Call this at the very top of app.py before any auth check.
+    Name kept identical so app.py needs no changes.
     """
     if st.session_state.get("auth_token"):
-        return  # already set, nothing to do
+        return  # already in memory, nothing to do
 
-    cm = _cookie_manager()
-    if cm is None:
-        return  # cookie support not installed
-
-    token = cm.get(_COOKIE_NAME)
+    token = st.query_params.get(_TOKEN_PARAM)
     if token:
         st.session_state["auth_token"] = token
 
 
-def _save_token_to_cookie(token: str):
-    """Persist token in browser cookie after a successful login."""
-    cm = _cookie_manager()
-    if cm is None:
-        return
-    cm.set(_COOKIE_NAME, token, max_age=_COOKIE_MAX_AGE)
-
-
-def _clear_cookie():
-    """Delete the auth cookie on logout."""
-    cm = _cookie_manager()
-    if cm is None:
-        return
-    cm.delete(_COOKIE_NAME)
+def _cookie_manager():
+    """
+    Stub — kept so app.py import of _cookie_manager() doesn't break.
+    No-op: query_params strategy needs no cookie manager instance.
+    """
+    return None
 
 
 def persist_login(token: str):
     """
-    Call this from your login page right after a successful authentication
-    instead of setting auth_token directly, so the cookie is also written.
-
-    Example (pages/login.py):
-        from auth.session import persist_login
-        persist_login(token)
-        st.rerun()
+    Call this after a successful login instead of setting auth_token directly.
+    Writes token to both session_state and query_params so it survives refresh.
     """
     st.session_state["auth_token"] = token
-    _save_token_to_cookie(token)
+    st.query_params[_TOKEN_PARAM] = token
+
+
+def _clear_token():
+    """Remove token from query_params on logout or expiry."""
+    try:
+        del st.query_params[_TOKEN_PARAM]
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------
-# Core auth functions (unchanged API, extended implementation)
+# Core auth functions
 # ---------------------------------------------------------------------------
 
 def require_auth():
@@ -102,7 +68,6 @@ def require_auth():
     Gate every page behind authentication.
     Returns the current user dict if authenticated, otherwise stops.
     """
-    # Attempt cookie restore first (covers refresh scenario)
     restore_session_from_cookie()
 
     token = st.session_state.get("auth_token")
@@ -112,9 +77,8 @@ def require_auth():
 
     user = validate_session(token)
     if not user:
-        # Token invalid/expired — clean up everything
         st.session_state.clear()
-        _clear_cookie()
+        _clear_token()
         st.warning("Your session has expired. Please sign in again.")
         _redirect_to_login()
         st.stop()
@@ -135,11 +99,11 @@ def current_user_data_path(subdir: str = "") -> Path:
 
 
 def logout():
-    """Revoke server-side session, clear cookie, and wipe all state."""
+    """Revoke server-side session, clear query param, and wipe all state."""
     token = st.session_state.get("auth_token")
     if token:
         revoke_session(token)
-    _clear_cookie()
+    _clear_token()
     st.session_state.clear()
     st.rerun()
 
