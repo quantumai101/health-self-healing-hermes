@@ -98,7 +98,8 @@ def _step_mfa():
             "6-digit authentication code",
             max_chars=10,
             placeholder="123456",
-            help="Enter the code from your authenticator app, or a backup code."
+            help="Enter the code from your authenticator app, or a backup code.",
+            autocomplete="off"
         )
         col1, col2 = st.columns(2)
         submitted = col1.form_submit_button("Verify →", use_container_width=True)
@@ -161,16 +162,7 @@ def _step_force_mfa_setup():
             st.session_state["totp_setup_data"] = setup_totp(user_id)
 
     data = st.session_state["totp_setup_data"]
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        st.image(data["qr_png"], width=200)
-    with col2:
-        with st.expander("Can't scan? Enter code manually"):
-            st.code(data["secret"], language=None)
-        if data["backup_codes"]:
-            with st.expander("🔑 Save your backup codes"):
-                st.warning("Store these safely — each code can only be used once.")
-                st.code("\n".join(data["backup_codes"]), language=None)
+    st.image(data["qr_png"], width=200)
 
     if st.button("I've scanned it — Continue →", use_container_width=True):
         st.session_state["login_step"] = "force_mfa_verify"
@@ -184,7 +176,12 @@ def _step_force_mfa_verify():
     st.info("Enter the 6-digit code from your authenticator app to confirm setup.")
 
     with st.form("force_verify_form"):
-        code = st.text_input("Code from app", max_chars=6, placeholder="123456")
+        code = st.text_input(
+            "Code from app",
+            max_chars=6,
+            placeholder="123456",
+            autocomplete="off"
+        )
         submitted = st.form_submit_button("Enable MFA & Sign In →", use_container_width=True)
 
     if submitted:
@@ -248,16 +245,7 @@ def _step_mfa_setup():
         st.session_state["totp_setup_data"] = setup_totp(user_id)
 
     data = st.session_state["totp_setup_data"]
-
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        st.image(data["qr_png"], width=200)
-    with col2:
-        with st.expander("Can't scan? Enter code manually"):
-            st.code(data["secret"], language=None)
-        with st.expander("🔑 Save your backup codes (one-time use)"):
-            st.warning("Store these somewhere safe. Each can be used once if you lose your phone.")
-            st.code("\n".join(data["backup_codes"]), language=None)
+    st.image(data["qr_png"], width=200)
 
     st.info("Once scanned, click Continue to verify your setup.")
 
@@ -272,7 +260,12 @@ def _step_mfa_verify():
     st.info("Enter the 6-digit code from your authenticator app to confirm setup.")
 
     with st.form("verify_form"):
-        code = st.text_input("Code from app", max_chars=6, placeholder="123456")
+        code = st.text_input(
+            "Code from app",
+            max_chars=6,
+            placeholder="123456",
+            autocomplete="off"
+        )
         submitted = st.form_submit_button("Enable MFA & Sign In →", use_container_width=True)
 
     if submitted:

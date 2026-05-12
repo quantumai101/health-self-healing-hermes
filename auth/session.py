@@ -151,13 +151,6 @@ def render_user_sidebar():
         mfa_status = "🔐 MFA on" if user["mfa_enabled"] else "⚠️ MFA off"
         st.caption(mfa_status)
 
-        # Show idle timeout countdown in sidebar
-        last_active = st.session_state.get("last_active")
-        if last_active:
-            remaining = max(0, int(IDLE_SECONDS - (time.time() - last_active)))
-            mins, secs = divmod(remaining, 60)
-            st.caption(f"⏱️ Session expires in {mins}m {secs:02d}s")
-
         if st.button("Sign out", use_container_width=True):
             logout()
 
