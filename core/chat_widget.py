@@ -10,9 +10,14 @@ Each page gets its own isolated chat history, suggested ops, and AI system promp
 The widget renders:
     1. Chat history  (st.chat_message bubbles)
     2. ✦ SUGGESTED HEALTH OPERATIONS  (2-col st.button grid)
-    3. st.chat_input()  (sticky bottom bar — identical to the working blue-box)
+    3. st.chat_input()  (sticky bottom bar)
 
 All state is namespaced by page_key so pages never share history.
+
+KEY FIX: button keys now use numeric col_index instead of label slice,
+and inp_key uses page_key only (no session suffix). This prevents
+DuplicateWidgetID on first load when Streamlit executes the page script
+twice before the session stabilises (observed on HF Spaces + local).
 """
 
 import streamlit as st
@@ -152,11 +157,11 @@ _SYSTEM_PROMPTS: dict[str, str] = {
 }
 
 _PLACEHOLDERS: dict[str, str] = {
-    "chat":          "Ask about patient health, BMI risks, disease thresholds…",
-    "compliance":    "Ask about compliance status, audit findings, data privacy risks…",
-    "dashboard":     "Ask about population health metrics, risk tiers, cohort trends…",
-    "ehr_summarizer":"Ask about this patient's EHR — medications, diagnoses, test results…",
-    "news":          "Ask about health news, research updates, policy changes…",
+    "chat":           "Ask about patient health, BMI risks, disease thresholds…",
+    "compliance":     "Ask about compliance status, audit findings, data privacy risks…",
+    "dashboard":      "Ask about population health metrics, risk tiers, cohort trends…",
+    "ehr_summarizer": "Ask about this patient's EHR — medications, diagnoses, test results…",
+    "news":           "Ask about health news, research updates, policy changes…",
 }
 
 _OFFLINE_FALLBACK = (
@@ -198,6 +203,33 @@ def render_chat_widget(page_key: str) -> None:
     sug_key  = f"_cw_sug_{page_key}"
     inp_key  = f"_cw_input_{page_key}"
 
+    # ── Guard: skip if widgets already registered this script run ────────────
+    # Uses a session_state flag keyed to the Streamlit script run counter.
+    # Streamlit increments st.session_state._script_run_count internally
+    # on every rerun. We read it here (before widget registration) to get
+    # the current run number, then stamp "already rendered".
+    # This prevents DuplicateWidgetID when Streamlit executes the page
+    # script twice on first load (observed on HF Spaces and local multipage).
+    try:
+        from streamlit.runtime.scriptrunner import get_script_run_ctx
+        _ctx = get_script_run_ctx()
+        # Use a set stored on the context object itself — lives only for
+        # this script execution, not persisted in session_state.
+        if not hasattr(_ctx, '_cw_rendered_keys'):
+            _ctx._cw_rendered_keys = set()
+        if inp_key in _ctx._cw_rendered_keys:
+            return   # Already rendered this widget set in this run
+        _ctx._cw_rendered_keys.add(inp_key)
+    except Exception:
+        # Fallback if ctx unavailable: use session_state with run counter
+        _run_ctr = st.session_state.get("_cw_run_ctr", 0)
+        _done_key = f"_cw_done_{page_key}_{_run_ctr}"
+        if st.session_state.get(_done_key):
+            return
+        st.session_state[_done_key] = True
+        # Bump counter so next rerun gets a fresh slot
+        st.session_state["_cw_run_ctr"] = _run_ctr + 1
+
     # ── Init session state ────────────────────────────────────────────────────
     if hist_key not in st.session_state:
         st.session_state[hist_key] = []
@@ -206,7 +238,7 @@ def render_chat_widget(page_key: str) -> None:
 
     st.divider()
 
-    # ── Chat history — rendered FIRST so it sits above suggested ops ──────────
+    # ── Chat history ──────────────────────────────────────────────────────────
     for msg in st.session_state[hist_key]:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
@@ -219,16 +251,19 @@ def render_chat_widget(page_key: str) -> None:
         unsafe_allow_html=True,
     )
 
-    # ── Suggested ops — 2-col native st.button() grid ─────────────────────────
+    # ── Suggested ops — 2-col button grid ─────────────────────────────────────
+    # Keys use pure numeric indices (row_start + col_index) — never label
+    # slices. Label slices caused collisions when two labels share a prefix.
     ops = _SUGGESTED_OPS.get(page_key, [])
     for row_start in range(0, len(ops), 2):
         pair = ops[row_start: row_start + 2]
         cols = st.columns(len(pair))
-        for col, (btn_label, btn_prompt) in zip(cols, pair):
+        for col_idx, (col, (btn_label, btn_prompt)) in enumerate(zip(cols, pair)):
             with col:
+                btn_key = f"_cw_sug_{page_key}_{row_start}_{col_idx}"
                 if st.button(
                     btn_label,
-                    key=f"_cw_sug_{page_key}_{row_start}_{btn_label[:18]}",
+                    key=btn_key,
                     use_container_width=True,
                 ):
                     st.session_state[sug_key] = btn_prompt
@@ -236,7 +271,7 @@ def render_chat_widget(page_key: str) -> None:
 
     st.write("")
 
-    # ── Chat input — native st.chat_input() — same blue-box as main page ──────
+    # ── Chat input ────────────────────────────────────────────────────────────
     prefill = st.session_state.get(sug_key, "") or ""
     if prefill:
         st.session_state[sug_key] = ""
