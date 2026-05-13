@@ -1,5 +1,15 @@
 """
 pages/chat.py — Agent Chat page
+
+Key deduplication approach: render_chat_widget(page_key=...) already namespaces
+all button keys under that prefix. The only way duplicates appeared was if
+render() was somehow invoked twice in the same Streamlit script execution.
+
+In Streamlit multipage, the page script is the entry point — render() at module
+level is called exactly once per rerun. No guard needed. The previous guards were
+actively causing the blank-screen regression by blocking re-renders.
+
+This version: no sentinel, no guard, just a clean try/except wrapper.
 """
 import streamlit as st
 
@@ -18,7 +28,7 @@ def _render_inner() -> None:
     from agents import AGENT_REGISTRY
     from core.chat_widget import render_chat_widget
 
-    STICKY_TITLE_CSS = """
+    st.markdown("""
 <style>
 .hdw-sticky-title {
     position: -webkit-sticky;
@@ -41,8 +51,7 @@ def _render_inner() -> None:
 <div class="hdw-sticky-title">
     <span>🤖 HEALTH DIGITAL WORKFORCE</span>
 </div>
-"""
-    st.markdown(STICKY_TITLE_CSS, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
     def _get_instance(entry):
         return entry() if isinstance(entry, type) else entry
@@ -61,22 +70,15 @@ def _render_inner() -> None:
             return _get_instance(next(iter(AGENT_REGISTRY.values()))).run(cmd)
         return "⚠️ No agents available."
 
-    def _send_action(cmd):
-        append_message("user", cmd)
-        with st.status("🤖 Thinking and reasoning...", expanded=False) as status:
-            response_text = _route_to_agent(cmd)
-            status.update(label="🤖 Reasoning complete", state="complete", expanded=False)
-        append_message("assistant", response_text)
-        st.rerun()
-
-    # Conversation history
+    # ── Conversation history ───────────────────────────────────────────────
     for msg in get_messages():
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    # Suggested ops + chat input
+    # ── Suggested ops + chat input ─────────────────────────────────────────
+    # page_key namespaces all widget keys — prevents collisions with other pages
     render_chat_widget(page_key="chat")
 
 
-# Single call — must appear exactly once at module level.
+# ── Multipage entrypoint — called once per rerun by Streamlit's router ─────
 render()
