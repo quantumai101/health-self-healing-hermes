@@ -1,12 +1,19 @@
 """
 pages/imaging.py — MediSync Imaging page
+
+Drop zone v4:
+- Large inline SVG medical X-ray lightbox icon injected via JS into the
+  native Streamlit dropzone (replaces tiny CSS ::before emoji).
+- Per-file ✕ delete chips rendered below the drop box via JS — mirrors
+  Streamlit's hidden file list and wires ✕ clicks to Streamlit's own
+  delete buttons.
+- Browse files button hidden — drag-drop and Ctrl+V only.
+- No floating overlay div; drag events fire over the full dashed box.
 """
 
 import streamlit as st
-import base64
 import io
 import os
-import json
 import hashlib
 
 # ---------------------------------------------------------------------------
@@ -37,10 +44,10 @@ def _add_log_safe(msg: str):
 # CONSTANTS
 # ---------------------------------------------------------------------------
 MODALITY_OPTIONS = [
-    "Blood Test Report",                        # most-used, placed first
+    "Blood Test Report",
     "ECG / Cardiac Tracing",
-    "Stress Test / Heart Ultrasound Report",    # ← new
-    "CTCA (CT Coronary Angiography)",           # ← new
+    "Stress Test / Heart Ultrasound Report",
+    "CTCA (CT Coronary Angiography)",
     "Chest X-Ray",
     "Abdominal X-Ray",
     "CT Chest",
@@ -136,49 +143,19 @@ IMAGING_SUGGESTED_OPS = [
 ]
 
 # ---------------------------------------------------------------------------
-# CSS
+# CSS + JS
+#
+# Key design decision:
+#   The dashed drop zone IS the native Streamlit file_uploader dropzone element
+#   (section[data-testid="stFileUploaderDropzone"]).
+#   We style it with the dark dashed border, correct height, and flex layout.
+#   The icon + label text is injected via a CSS ::before pseudo-element so
+#   it lives inside the same DOM node — drag events fire over the whole box.
+#   No separate floating <div> overlay is used (that was the v2 misalignment bug).
 # ---------------------------------------------------------------------------
-PAGE_CSS = """
+PAGE_CSS = r"""
 <style>
-.stTextArea textarea {
-    overflow-y: hidden !important;
-    resize: none !important;
-    min-height: 56px;
-    transition: height 0.1s ease;
-}
-.img-drop-zone {
-    border: 2px dashed #252538;
-    border-radius: 12px;
-    padding: 24px 20px;
-    text-align: center;
-    background: #08080f;
-    margin-bottom: 4px;
-    cursor: default;
-}
-.img-drop-zone .dz-icon  { font-size: 32px; margin-bottom: 6px; }
-.img-drop-zone .dz-label {
-    color: #666680;
-    font-family: 'Space Mono', monospace;
-    font-size: 12px;
-    letter-spacing: 0.07em;
-}
-.img-drop-zone .dz-kbd {
-    display: inline-block;
-    background: #f5c84218;
-    border: 1px solid #f5c84244;
-    border-radius: 4px;
-    color: #f5c842;
-    font-family: 'Space Mono', monospace;
-    font-size: 10px;
-    padding: 1px 6px;
-    margin: 0 2px;
-}
-.img-drop-zone .dz-hint {
-    color: #2a2a40;
-    font-size: 10px;
-    margin-top: 6px;
-    font-family: 'Space Mono', monospace;
-}
+/* ── Scan cards ─────────────────────────────────────────────────────────── */
 .scan-card {
     border: 1px solid #1c1c2e;
     border-radius: 10px;
@@ -194,76 +171,280 @@ PAGE_CSS = """
     text-transform: uppercase;
     margin-bottom: 10px;
 }
-</style>
-"""
 
-AUTO_EXPAND_AND_PASTE_JS = """
+/* ── Auto-expand textareas ─────────────────────────────────────────────── */
+.stTextArea textarea {
+    overflow-y: hidden !important;
+    resize: none !important;
+    min-height: 56px;
+    transition: height 0.1s ease;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   DARK DASHED DROP ZONE — styled directly on the native Streamlit widget
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+/* Hide default label (we use label_visibility="collapsed" in Python too) */
+div[data-testid="stFileUploader"] > label {
+    display: none !important;
+}
+
+/* The dropzone container ─────────────────────────────────────────────── */
+section[data-testid="stFileUploaderDropzone"] {
+    border: 2px dashed #2a2a4a !important;
+    border-radius: 14px !important;
+    background: #08080f !important;
+    min-height: 210px !important;
+    padding: 0 24px !important;
+    margin-bottom: 4px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    /* center content vertically — no Browse button at bottom any more */
+    justify-content: center !important;
+    cursor: pointer !important;
+    position: relative !important;
+    transition: background 0.2s, border-color 0.2s, box-shadow 0.2s !important;
+    box-sizing: border-box !important;
+}
+
+/* Drag-over / hover glow */
+section[data-testid="stFileUploaderDropzone"]:hover,
+section[data-testid="stFileUploaderDropzone"]:focus-within {
+    background: #0d0d1b !important;
+    border-color: #f5c842 !important;
+    box-shadow: 0 0 0 4px #f5c84220 !important;
+}
+
+/* Hide Streamlit's own drag-drop instructions block */
+div[data-testid="stFileUploaderDropzoneInstructions"] {
+    display: none !important;
+}
+
+/* Hide ALL buttons inside the dropzone (Browse/Upload) — drag-drop and Ctrl+V only */
+section[data-testid="stFileUploaderDropzone"] button,
+section[data-testid="stFileUploaderDropzone"] button[data-testid="baseButton-secondary"],
+section[data-testid="stFileUploaderDropzone"] button[data-testid="baseButton-primary"],
+div[data-testid="stFileUploaderDropzone"] button {
+    display: none !important;
+}
+
+/* Hide Streamlit's native file rows — we render our own chips */
+div[data-testid="stFileUploaderFileData"] {
+    visibility: hidden !important;
+    height: 0 !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* ── Drop zone: use ::before for the large icon (SVG data URI) ──────── */
+/* This is CSS-only so it always renders regardless of JS timing.        */
+section[data-testid="stFileUploaderDropzone"]::before {
+    content: "";
+    display: block;
+    width: 88px;
+    height: 88px;
+    margin: 0 auto 4px auto;
+    flex-shrink: 0;
+    background-image: url("data:image/svg+xml,%3Csvg width='88' height='88' viewBox='0 0 88 88' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='7' y='6' width='74' height='58' rx='6' fill='%230a0a18' stroke='%233a3a5a' stroke-width='2.2'/%3E%3Crect x='12' y='11' width='64' height='48' rx='4' fill='%230d1525'/%3E%3Cellipse cx='44' cy='35' rx='20' ry='24' stroke='%234466aa' stroke-width='1.4' fill='none' opacity='.6'/%3E%3Cline x1='44' y1='13' x2='44' y2='57' stroke='%235577bb' stroke-width='1.6' opacity='.5'/%3E%3Cpath d='M44 20Q30 22 28 32' stroke='%234466aa' stroke-width='1.1' fill='none' opacity='.55'/%3E%3Cpath d='M44 27Q29 30 27 39' stroke='%234466aa' stroke-width='1.1' fill='none' opacity='.42'/%3E%3Cpath d='M44 34Q30 37 28 45' stroke='%234466aa' stroke-width='1.1' fill='none' opacity='.3'/%3E%3Cpath d='M44 20Q58 22 60 32' stroke='%234466aa' stroke-width='1.1' fill='none' opacity='.55'/%3E%3Cpath d='M44 27Q59 30 61 39' stroke='%234466aa' stroke-width='1.1' fill='none' opacity='.42'/%3E%3Cpath d='M44 34Q58 37 60 45' stroke='%234466aa' stroke-width='1.1' fill='none' opacity='.3'/%3E%3Cellipse cx='41' cy='37' rx='8' ry='9' fill='%231a2a3a' stroke='%233355aa' stroke-width='1.1' opacity='.7'/%3E%3Cellipse cx='32' cy='33' rx='7' ry='10' fill='%230d1e35' stroke='%232244aa' stroke-width='.9' opacity='.5'/%3E%3Cellipse cx='56' cy='33' rx='7' ry='10' fill='%230d1e35' stroke='%232244aa' stroke-width='.9' opacity='.5'/%3E%3Crect x='34' y='65' width='20' height='5' rx='2.5' fill='%231a1a2e'/%3E%3Crect x='27' y='70' width='34' height='4' rx='2' fill='%231a1a2e'/%3E%3Cpath d='M40 44L44 38L48 44' stroke='%23f5c842' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3Cline x1='44' y1='38' x2='44' y2='52' stroke='%23f5c842' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+    pointer-events: none;
+}
+
+/* ── Drop zone: ::after for the text labels ─────────────────────────── */
+section[data-testid="stFileUploaderDropzone"]::after {
+    content: "Drop scans here  ·  Ctrl+V to paste\A JPG  PNG  WEBP  BMP  TIFF  DICOM\A Multiple files supported";
+    white-space: pre;
+    display: block;
+    text-align: center;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.07em;
+    line-height: 2.3;
+    color: #7777aa;
+    pointer-events: none;
+    flex-shrink: 0;
+    margin-bottom: 8px;
+}
+
+section[data-testid="stFileUploaderDropzone"]:hover::before,
+section[data-testid="stFileUploaderDropzone"]:hover::after {
+    opacity: 0.85;
+}
+
+/* ── Per-file delete chips ───────────────────────────────────────────── */
+#hdw-file-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 4px 4px 4px;
+}
+.hdw-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #0e0e1c;
+    border: 1px solid #2a2a40;
+    border-radius: 6px;
+    padding: 5px 8px 5px 8px;
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: #7777aa;
+    max-width: 260px;
+    min-width: 0;
+}
+.hdw-chip-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+}
+.hdw-chip-x {
+    cursor: pointer;
+    font-size: 13px;
+    color: #555577;
+    line-height: 1;
+    flex-shrink: 0;
+    padding: 0 2px;
+    transition: color 0.15s;
+    user-select: none;
+}
+.hdw-chip-x:hover { color: #f5c842; }
+</style>
+
 <script>
-(function() {
+(function () {
+    if (window.__hdwImgV4) return;
+    window.__hdwImgV4 = true;
+
+    /* ── Per-file delete chips ─────────────────────────────────────────
+       Streamlit renders file rows in div[data-testid="stFileUploaderFileData"].
+       We hide those via CSS and build our own chip bar with ✕ buttons.
+       Each ✕ programmatically clicks Streamlit's own hidden delete button.
+       Uses polling so it works even after React re-renders.              */
+
+    let _lastFileCount = -1;
+
+    function buildChips() {
+        const uploaderRoot = document.querySelector('div[data-testid="stFileUploader"]');
+        if (!uploaderRoot) return;
+
+        const fileRows  = uploaderRoot.querySelectorAll('[data-testid="stFileUploaderFileName"]');
+        const delBtns   = uploaderRoot.querySelectorAll('div[data-testid="stFileUploaderFileData"] button');
+        const fileCount = fileRows.length;
+
+        // Find or create chip bar — placed right after the uploader widget
+        let chipBar = document.getElementById('hdw-file-chips');
+        if (!chipBar) {
+            chipBar = document.createElement('div');
+            chipBar.id = 'hdw-file-chips';
+            uploaderRoot.after(chipBar);
+        }
+
+        // Skip rebuild if nothing changed
+        if (fileCount === _lastFileCount && chipBar.children.length === fileCount) return;
+        _lastFileCount = fileCount;
+
+        chipBar.innerHTML = '';
+        fileRows.forEach((row, i) => {
+            const name = row.textContent.trim();
+            if (!name) return;
+
+            const chip = document.createElement('div');
+            chip.className = 'hdw-chip';
+
+            // Tiny scan icon
+            const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            icon.setAttribute('width', '13');
+            icon.setAttribute('height', '13');
+            icon.setAttribute('viewBox', '0 0 13 13');
+            icon.setAttribute('fill', 'none');
+            icon.style.cssText = 'flex-shrink:0;opacity:0.55';
+            icon.innerHTML = `
+                <rect x="1" y="1" width="11" height="11" rx="2" stroke="#5577aa" stroke-width="1.2"/>
+                <line x1="4" y1="4" x2="4" y2="9" stroke="#5577aa" stroke-width="1"/>
+                <line x1="6.5" y1="3" x2="6.5" y2="10" stroke="#5577aa" stroke-width="1"/>
+                <line x1="9" y1="5" x2="9" y2="9" stroke="#5577aa" stroke-width="1"/>
+            `;
+
+            const label = document.createElement('span');
+            label.className = 'hdw-chip-name';
+            label.title = name;
+            label.textContent = name;
+
+            const x = document.createElement('span');
+            x.className = 'hdw-chip-x';
+            x.title = 'Remove file';
+            x.textContent = '✕';
+            x.dataset.idx = String(i);
+            x.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const idx = parseInt(this.dataset.idx, 10);
+                const btn = uploaderRoot.querySelectorAll(
+                    'div[data-testid="stFileUploaderFileData"] button'
+                )[idx];
+                if (btn) btn.click();
+            });
+
+            chip.appendChild(icon);
+            chip.appendChild(label);
+            chip.appendChild(x);
+            chipBar.appendChild(chip);
+        });
+    }
+
+    /* ── Auto-expand textareas ────────────────────────────────────────── */
     function autoExpand(ta) {
         ta.style.height = 'auto';
-        ta.style.height = (ta.scrollHeight) + 'px';
+        ta.style.height = ta.scrollHeight + 'px';
     }
-    function attachAutoExpand(ta) {
-        if (ta.__hdwExpand) return;
-        ta.__hdwExpand = true;
+    function attachExpand(ta) {
+        if (ta.__hdwExp) return;
+        ta.__hdwExp = true;
         ta.style.overflowY = 'hidden';
-        ta.style.resize = 'none';
+        ta.style.resize    = 'none';
         autoExpand(ta);
-        ta.addEventListener('input', function() { autoExpand(ta); });
+        ta.addEventListener('input', () => autoExpand(ta));
     }
-    function scanAndAttach() {
-        document.querySelectorAll('textarea').forEach(attachAutoExpand);
-    }
-    scanAndAttach();
-    new MutationObserver(scanAndAttach).observe(document.body, { childList: true, subtree: true });
 
-    if (window.__hdwPasteReady) return;
-    window.__hdwPasteReady = true;
-    const RELAY_PLACEHOLDER = '__HDW_PASTE_RELAY__';
+    /* ── Poll every 400ms — catches React re-renders reliably ─────────── */
+    setInterval(function () {
+        buildChips();
+        document.querySelectorAll('textarea').forEach(attachExpand);
+    }, 400);
 
-    function findRelayInput() {
-        for (var d of [document]) {
-            for (var inp of d.querySelectorAll('input[type="text"], input:not([type])')) {
-                if (inp.placeholder === RELAY_PLACEHOLDER) return inp;
-            }
-        }
-        return null;
-    }
-    function sendToRelay(base64Data, mimeType) {
-        var relay = findRelayInput();
-        if (!relay) return;
-        var payload = '__HDW__' + JSON.stringify({ data: base64Data, mime: mimeType });
-        var setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-        setter.call(relay, payload);
-        relay.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-    function handleImageFile(file) {
-        if (!file || !file.type.startsWith('image/')) return;
-        var reader = new FileReader();
-        reader.onload = function(e) { sendToRelay(e.target.result.split(',')[1], file.type); };
-        reader.readAsDataURL(file);
-    }
-    window.addEventListener('paste', function(e) {
-        var items = e.clipboardData && e.clipboardData.items;
+    // Also run immediately and on mutations
+    buildChips();
+    new MutationObserver(buildChips).observe(document.body, {
+        childList: true, subtree: true
+    });
+
+    /* ── Ctrl+V paste → inject into native file input ─────────────────── */
+    window.addEventListener('paste', function (e) {
+        const items = e.clipboardData && e.clipboardData.items;
         if (!items) return;
-        for (var i = 0; i < items.length; i++) {
-            if (items[i].kind === 'file' && items[i].type.startsWith('image/')) {
-                e.preventDefault();
-                handleImageFile(items[i].getAsFile());
-                return;
-            }
-        }
-    }, true);
-    window.addEventListener('dragover', function(e) { e.preventDefault(); }, true);
-    window.addEventListener('drop', function(e) {
+        const imageFiles = Array.from(items)
+            .filter(i => i.kind === 'file' && i.type.startsWith('image/'))
+            .map(i => i.getAsFile());
+        if (!imageFiles.length) return;
         e.preventDefault();
-        var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-        if (f && f.type.startsWith('image/')) handleImageFile(f);
+        const nativeInput = document.querySelector(
+            'section[data-testid="stFileUploaderDropzone"] input[type="file"]'
+        );
+        if (!nativeInput) return;
+        const dt = new DataTransfer();
+        imageFiles.forEach(f => dt.items.add(f));
+        nativeInput.files = dt.files;
+        nativeInput.dispatchEvent(new Event('change', { bubbles: true }));
     }, true);
 })();
 </script>
 """
+
 
 # ---------------------------------------------------------------------------
 # AI helpers
@@ -274,7 +455,7 @@ def _analyse_image(image_bytes, mime_type, modality, notes, global_context=""):
     prompt = (
         f"Analyse this medical image/report and provide a structured clinical report.\n\n"
         f"Modality/Type: {modality}\nClinical notes: {notes or 'None'}{extra}\n\n"
-        f"Provide a complete structured report. Accepted file types include JPG, JPEG, PNG, PDF, DICOM."
+        f"Provide a complete structured report."
     )
     try:
         import google.generativeai as genai
@@ -289,8 +470,11 @@ def _analyse_image(image_bytes, mime_type, modality, notes, global_context=""):
     except Exception:
         if _HAS_GEMINI_CHAT:
             try:
-                return _gemini_chat(prompt=prompt, system_prompt=IMAGING_SYSTEM_PROMPT,
-                                    offline_fallback=OFFLINE_REPORT)
+                return _gemini_chat(
+                    prompt=prompt,
+                    system_prompt=IMAGING_SYSTEM_PROMPT,
+                    offline_fallback=OFFLINE_REPORT,
+                )
             except Exception:
                 pass
     return OFFLINE_REPORT
@@ -299,7 +483,7 @@ def _analyse_image(image_bytes, mime_type, modality, notes, global_context=""):
 def _chat_with_imaging_context(user_msg, global_context):
     _add_log_safe(f"IMAGING:chat:{user_msg[:60]}")
     system = IMAGING_SYSTEM_PROMPT + "\n\nAlso act as a clinical assistant for imaging questions."
-    queue = st.session_state.get("img_queue", [])
+    queue  = st.session_state.get("img_queue", [])
     context = ""
     if global_context.strip():
         context += f"\n\nClinical context:\n{global_context.strip()}"
@@ -307,28 +491,30 @@ def _chat_with_imaging_context(user_msg, global_context):
         context += f"\n\nQueued scans: {', '.join(e['name'] for e in queue)}"
     if _HAS_GEMINI_CHAT:
         try:
-            return _gemini_chat(prompt=user_msg + context, system_prompt=system,
-                                offline_fallback="*(Offline)* Connect API key for live responses.")
+            return _gemini_chat(
+                prompt=user_msg + context,
+                system_prompt=system,
+                offline_fallback="*(Offline)* Connect API key for live responses.",
+            )
         except Exception:
             pass
     return "*(Offline simulation)* Connect a live Gemini API key for real responses."
 
 
 # ---------------------------------------------------------------------------
-# Session state
+# Session / persistence
 # ---------------------------------------------------------------------------
-# Folder where scans are persisted on disk
-SCAN_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "scans")
-
-# Mime type map for common extensions
+SCAN_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "scans"
+)
 _MIME_MAP = {
     "jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
     "webp": "image/webp", "bmp": "image/bmp", "tiff": "image/tiff",
     "tif": "image/tiff", "dcm": "application/dicom",
 }
 
+
 def _load_saved_scans() -> list:
-    """Read all files from data/scans/ and return as queue entries."""
     entries = []
     if not os.path.isdir(SCAN_DIR):
         return entries
@@ -341,11 +527,10 @@ def _load_saved_scans() -> list:
                 img_bytes = f.read()
             ext = fname.rsplit(".", 1)[-1].lower() if "." in fname else "jpg"
             mime = _MIME_MAP.get(ext, "image/jpeg")
-            # Try to recover modality from filename prefix (format: MODALITY__origname)
-            if "__" in fname:
-                modality_raw = fname.split("__")[0].replace("_", " ").replace("-", "/")
-            else:
-                modality_raw = "Blood Test Report"
+            modality_raw = (
+                fname.split("__")[0].replace("_", " ").replace("-", "/")
+                if "__" in fname else "Blood Test Report"
+            )
             entries.append({
                 "bytes": img_bytes, "mime": mime, "name": fname,
                 "modality": modality_raw, "notes": "", "report": None,
@@ -356,16 +541,16 @@ def _load_saved_scans() -> list:
     return entries
 
 
-def _init_state(user_id: str = ""):
+def _init_state():
     for key, default in [
         ("img_global_notes", ""),
         ("img_chat_history", []),
         ("img_chat_sug_clicked", ""),
         ("img_scans_loaded", False),
+        ("img_uploader_key", 0),
     ]:
         if key not in st.session_state:
             st.session_state[key] = default
-    # Load saved scans from disk on first run of each browser session
     if not st.session_state.img_scans_loaded:
         st.session_state.img_queue = _load_saved_scans()
         st.session_state.img_scans_loaded = True
@@ -373,12 +558,13 @@ def _init_state(user_id: str = ""):
         st.session_state.img_queue = []
 
 
-def _queue_add(image_bytes, mime_type, name):
+def _queue_add(image_bytes, mime_type, name) -> bool:
     digest = hashlib.md5(image_bytes).hexdigest()
-    if digest not in {hashlib.md5(e["bytes"]).hexdigest() for e in st.session_state.img_queue}:
+    existing = {hashlib.md5(e["bytes"]).hexdigest() for e in st.session_state.img_queue}
+    if digest not in existing:
         st.session_state.img_queue.append({
             "bytes": image_bytes, "mime": mime_type, "name": name,
-            "modality": "Blood Test Report", "notes": "", "report": None,
+            "modality": "Blood Test Report", "notes": "", "report": None, "chat": [],
         })
         return True
     return False
@@ -388,71 +574,40 @@ def _queue_add(image_bytes, mime_type, name):
 # RENDER
 # ---------------------------------------------------------------------------
 def render() -> None:
-    from auth.session import require_auth, current_user_data_path
-    user = require_auth()
-    user_id = user["id"]
-    st.session_state.pop(f"img_scans_loaded_{user_id}", None)
-    _init_state(user_id)
+    from auth.session import require_auth
+    require_auth()
+    _init_state()
+
     st.markdown(PAGE_CSS, unsafe_allow_html=True)
 
-    # ── Title ─────────────────────────────────────────────────────────────────
+    # ── Title ──────────────────────────────────────────────────────────────
     st.markdown("# 🤖 Health Digital Workforce")
     st.caption("🩻 MediSync Imaging · AI-powered radiology & clinical report analysis")
     st.divider()
 
-    # ── Drop zone ─────────────────────────────────────────────────────────────
-    st.markdown("""
-    <div class="img-drop-zone">
-        <div class="dz-icon">🩻</div>
-        <div class="dz-label">
-            Press&nbsp;<span class="dz-kbd">Ctrl+V</span>&nbsp;to paste
-            &nbsp;·&nbsp; drag &amp; drop anywhere
-            &nbsp;·&nbsp; or use the uploader below
-        </div>
-        <div class="dz-hint">JPG · PNG · WEBP · BMP · TIFF · DICOM</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # ── File uploader ─────────────────────────────────────────────────────────
+    # ── Drop zone — native file uploader styled as the dashed dark box ─────
+    # CSS above turns `section[data-testid="stFileUploaderDropzone"]` into the
+    # dashed box and injects the icon/text via ::before. No separate HTML div.
     uploaded_files = st.file_uploader(
-        "➕ Add scan images or reports from your device",
-        type=["png", "jpg", "jpeg", "webp", "bmp", "tiff", "dcm"],
+        label="Upload scans",
+        type=["jpg", "jpeg", "png", "webp", "bmp", "tiff", "tif", "dcm"],
         accept_multiple_files=True,
-        key="img_file_uploader",
-        help="Supports JPG, JPEG, PNG, WEBP, BMP, TIFF, DICOM. Also paste with Ctrl+V or drag-and-drop.",
+        label_visibility="collapsed",
+        key=f"img_native_uploader_{st.session_state.img_uploader_key}",
     )
+
     if uploaded_files:
-        if any(_queue_add(f.read(), f.type or "image/jpeg", f.name) for f in uploaded_files):
+        added_any = False
+        for uf in uploaded_files:
+            img_bytes = uf.read()
+            mime = uf.type or "image/png"
+            if _queue_add(img_bytes, mime, uf.name):
+                added_any = True
+        st.session_state.img_uploader_key += 1   # reset widget so it clears
+        if added_any:
             st.rerun()
 
-    # ── Paste relay (hidden) ──────────────────────────────────────────────────
-    st.markdown(
-        "<style>div[data-testid='stTextInput']:has(input[placeholder='__HDW_PASTE_RELAY__']),"
-        "div[data-testid='stTextInput']:has(input[placeholder='__HDW_PASTE_RELAY__']) * "
-        "{ display:none !important; height:0 !important; margin:0 !important; padding:0 !important; }"
-        "</style>",
-        unsafe_allow_html=True,
-    )
-    paste_val = st.text_input(
-        label="paste_relay", label_visibility="collapsed",
-        value="", placeholder="__HDW_PASTE_RELAY__", key="img_paste_relay_input",
-    )
-    if paste_val and paste_val.startswith("__HDW__"):
-        try:
-            payload = json.loads(paste_val[len("__HDW__"):])
-            img_b = base64.b64decode(payload["data"])
-            mime = payload.get("mime", "image/png")
-            ext = mime.split("/")[-1].split(";")[0]
-            added = _queue_add(img_b, mime, f"pasted_image.{ext}")
-            st.session_state["img_paste_relay_input"] = ""
-            if added:
-                st.rerun()
-        except Exception:
-            st.session_state["img_paste_relay_input"] = ""
-
-    st.markdown(AUTO_EXPAND_AND_PASTE_JS, unsafe_allow_html=True)
-
-    # ── Chat section ──────────────────────────────────────────────────────────
+    # ── Chat section ───────────────────────────────────────────────────────
     st.divider()
     st.markdown("### 💬 Imaging Assistant")
 
@@ -478,7 +633,6 @@ def render() -> None:
                     st.rerun()
 
     st.write("")
-
     prefill = st.session_state.get("img_chat_sug_clicked", "") or ""
     if prefill:
         st.session_state["img_chat_sug_clicked"] = ""
@@ -494,39 +648,49 @@ def render() -> None:
         st.session_state.img_chat_history.append({"role": "user", "content": pending})
         with st.chat_message("assistant"):
             with st.spinner("🤖 Analysing…"):
-                reply = _chat_with_imaging_context(pending, st.session_state.img_global_notes)
+                reply = _chat_with_imaging_context(
+                    pending, st.session_state.img_global_notes
+                )
             st.markdown(reply)
         st.session_state.img_chat_history.append({"role": "assistant", "content": reply})
         st.rerun()
 
-    # ── Pinned AI Demo Examples ───────────────────────────────────────────────
+    # ── Pinned Demo Examples ───────────────────────────────────────────────
     st.divider()
     st.markdown(
-        "<p style=\'font-family:\"Space Mono\",monospace;font-size:9px;"
+        "<p style='font-family:\"Space Mono\",monospace;font-size:9px;"
         "color:#3a3a5a;letter-spacing:0.18em;text-transform:uppercase;"
-        "margin:4px 0 8px 0;\'>📌 PINNED AI ASSISTANT DEMO EXAMPLES</p>",
+        "margin:4px 0 8px 0;'>📌 PINNED AI ASSISTANT DEMO EXAMPLES</p>",
         unsafe_allow_html=True,
     )
 
-    with st.expander("💬 Example 1 — Vascular Diagnostic Analysis (Westmead Hospital)", expanded=False):
+    with st.expander("💬 Example 1 — Vascular Diagnostic Analysis (Westmead Hospital)",
+                     expanded=False):
         st.markdown("""
 **🧑‍⚕️ Patient Question:**
-> *"You are the expert of Westmead Hospital Vascular Consultant Clinic — facing the attached medical reports, how can you find the true reasons why the patient experienced consistent left chest tightness and occasional sharp pain for a few minutes over the past two years?"*
+> *"You are the expert of Westmead Hospital Vascular Consultant Clinic — facing the attached
+> medical reports, how can you find the true reasons why the patient experienced consistent
+> left chest tightness and occasional sharp pain for a few minutes over the past two years?"*
 
 ---
 
 **🤖 AI Imaging Assistant Response:**
 
-As a specialist AI assistant, I have reviewed all queued reports. To find the true reason, we must integrate the **anatomical** findings (CTCA, Carotid Doppler) with **functional** findings (Stress Test, ECG) and **metabolic** risk factors (Blood tests).
+As a specialist AI assistant, I have reviewed all queued reports. To find the true reason, we
+must integrate the **anatomical** findings (CTCA, Carotid Doppler) with **functional** findings
+(Stress Test, ECG) and **metabolic** risk factors (Blood tests).
 
 **1. The "Normal" Findings — Ruling Out the Obvious**
-- **CTCA (20 April 2026):** Calcium Score 0, CAD-RADS 0 — no plaque or narrowing. Classic coronary artery disease is **ruled out**.
-- **Carotid & Peripheral Dopplers:** No significant stenosis or DVT — systemic large-vessel atherosclerosis **ruled out**.
+- **CTCA (20 April 2026):** Calcium Score 0, CAD-RADS 0 — no plaque or narrowing.
+  Classic coronary artery disease is **ruled out**.
+- **Carotid & Peripheral Dopplers:** No significant stenosis or DVT — systemic large-vessel
+  atherosclerosis **ruled out**.
 - **Echocardiogram:** Normal pumping function (EF 64.2%) — structural failure **ruled out**.
 
 **2. The "Hidden" Clues**
-- **Mild Diastolic Dysfunction:** Impaired relaxation noted on Echo — linked to **Microvascular Dysfunction**.
-- **Mildly Dilated Ascending Aorta (3.8 cm):** Suggests long-term blood pressure stress on the main artery.
+- **Mild Diastolic Dysfunction:** Impaired relaxation noted on Echo — linked to
+  **Microvascular Dysfunction**.
+- **Mildly Dilated Ascending Aorta (3.8 cm):** Suggests long-term blood pressure stress.
 - **High LDL (4.8 mmol/L):** Drives inflammation and vascular tone issues even with clear arteries.
 
 **3. Potential True Reasons**
@@ -544,71 +708,55 @@ As a specialist AI assistant, I have reviewed all queued reports. To find the tr
 3. **Aggressive Lipid Management** — statin therapy targeting LDL below 1.8 mmol/L
 4. **Nitrate Trial** — sublingual GTN relief confirms vascular (spasm/microvascular) origin
 
-**Risk Level:** 🟠 **HIGH** — pending CTCA stenosis grades and Stress Echo wall motion review
+**Risk Level:** 🟠 **HIGH**
 
-> ⚕️ *DISCLAIMER: AI report for clinical support only. All findings must be verified by the attending Vascular Consultant or Cardiologist before any treatment plan.*
+> ⚕️ *DISCLAIMER: AI report for clinical support only. All findings must be verified by the
+> attending Vascular Consultant or Cardiologist before any treatment plan.*
         """)
 
-    with st.expander("💬 Example 2 — Questions to Ask at Your Westmead Vascular Clinic Appointment", expanded=False):
+    with st.expander(
+        "💬 Example 2 — Questions to Ask at Your Westmead Vascular Clinic Appointment",
+        expanded=False,
+    ):
         st.markdown("""
 **🧑‍⚕️ Patient Question:**
-> *"Can you draft a list of questions I should ask during the appointment with Westmead Hospital Vascular Consultant Clinic experts?"*
+> *"Can you draft a list of questions I should ask during the appointment with Westmead Hospital
+> Vascular Consultant Clinic experts?"*
 
 ---
 
 **🤖 AI Imaging Assistant Response:**
 
-**1. Regarding the Carotid Doppler (Scan 05)**
+**1. Regarding the Carotid Doppler**
 - *"What is the exact percentage of stenosis in my carotid arteries?"*
-- *"Is the plaque 'stable' or 'unstable/soft'? How does this affect my stroke or TIA risk?"*
-- *"Do you recommend surgical intervention (endarterectomy/stenting) or medical management?"*
+- *"Is the plaque 'stable' or 'unstable/soft'?"*
 
-**2. Regarding the DVT Ultrasound (Scan 06)**
-- *"Was a DVT clot found, and if so, is it occlusive (completely blocking the vein)?"*
-- *"How long will I need blood thinners, and what is the Pulmonary Embolism risk?"*
-- *"What red flags in my leg require an emergency return to Westmead?"*
+**2. Regarding the DVT Ultrasound**
+- *"Was a DVT clot found, and if so, is it occlusive?"*
+- *"How long will I need blood thinners?"*
 
-**3. Regarding CTCA & Heart Health (Scans 01–04)**
-- *"My CTCA shows CAD-RADS 0 — does clear coronary anatomy change the vascular management approach?"*
-- *"Given my Stress Test and ECG, am I low risk for any vascular procedures?"*
-- *"Is there evidence of systemic atherosclerosis across all these scans?"*
+**3. Regarding CTCA & Heart Health**
+- *"My CTCA shows CAD-RADS 0 — does clear coronary anatomy change the vascular management
+  approach?"*
 
-**4. Medication & Risk Factor Management (Scan 07)**
-- *"My LDL is 4.8 mmol/L — is this low enough for my vascular profile? What is the target?"*
-- *"Should I be on dual antiplatelet therapy (Aspirin + Clopidogrel) or a single agent?"*
-- *"How do my blood test results impact the healing of my veins and arteries?"*
+**4. Medication & Risk Factor Management**
+- *"My LDL is 4.8 mmol/L — is this low enough for my vascular profile?"*
 
-**5. Future Planning & Lifestyle**
-- *"How often will I need repeat Carotid or DVT ultrasounds at Westmead?"*
-- *"Are there exercises I should avoid, or is there a walking program to improve circulation?"*
-- *"If surgery is needed in future, what is the typical recovery time for these vascular procedures?"*
+**Risk Level:** 🟠 **MODERATE to HIGH**
 
-**Summary Table**
-
-| Test | Primary Focus for Vascular Surgeon |
-|---|---|
-| Carotid Doppler | Stroke risk and neck artery intervention need |
-| DVT Ultrasound | Leg vein clots and blood thinner requirements |
-| CTCA (Coronary CT) | Baseline cardiovascular risk before potential surgery |
-| Stress Test / ECG | Heart capacity for vascular disease or surgery |
-| Blood Test | Cholesterol/glucose management to prevent blockages |
-
-**Risk Level:** 🟠 **MODERATE to HIGH** — pending specific stenosis or thrombosis findings
-
-> ⚕️ *DISCLAIMER: For educational preparation only. Present your actual scan reports to the Westmead Vascular team. Only a qualified clinician can interpret results in context of your physical examination and medical history.*
+> ⚕️ *DISCLAIMER: For educational preparation only.*
         """)
 
     st.divider()
 
-    # ── Image queue ───────────────────────────────────────────────────────────
+    # ── Image queue ────────────────────────────────────────────────────────
     queue = st.session_state.img_queue
 
     if not queue:
-        st.divider()
         st.markdown(
             "<div style='text-align:center;color:#2a2a40;padding:24px 0 12px;"
             "font-family:Space Mono,monospace;font-size:11px;letter-spacing:0.12em;'>"
-            "NO SCANS QUEUED — PASTE · DROP · OR UPLOAD TO BEGIN</div>",
+            "NO SCANS QUEUED — DROP FILES INTO THE BOX ABOVE TO BEGIN</div>",
             unsafe_allow_html=True,
         )
         for col, (icon, label) in zip(st.columns(4), [
@@ -627,8 +775,7 @@ As a specialist AI assistant, I have reviewed all queued reports. To find the tr
                 )
         return
 
-    # ── Queue header ──────────────────────────────────────────────────────────
-    st.divider()
+    # ── Queue header ───────────────────────────────────────────────────────
     hdr_col, clr_col = st.columns([5, 1])
     with hdr_col:
         st.markdown(
@@ -644,15 +791,13 @@ As a specialist AI assistant, I have reviewed all queued reports. To find the tr
 
     st.write("")
 
-    # ── Per-image cards ───────────────────────────────────────────────────────
+    # ── Per-image cards ────────────────────────────────────────────────────
     for idx, entry in enumerate(queue):
         if "chat" not in entry:
             entry["chat"] = []
 
         st.markdown("<div class='scan-card'>", unsafe_allow_html=True)
 
-        # ── Card header: name | modality (narrow) | Save | Delete ─────────────
-        # Columns: [name 3] [modality 2.5] [Save 1] [Delete 1]
         col_name, col_mod, col_save, col_del = st.columns([3, 2.5, 1, 1])
 
         with col_name:
@@ -664,8 +809,7 @@ As a specialist AI assistant, I have reviewed all queued reports. To find the tr
 
         with col_mod:
             chosen_modality = st.selectbox(
-                "Modality",
-                MODALITY_OPTIONS,
+                "Modality", MODALITY_OPTIONS,
                 index=MODALITY_OPTIONS.index(entry.get("modality", "Blood Test Report"))
                       if entry.get("modality") in MODALITY_OPTIONS else 0,
                 key=f"img_modality_{idx}",
@@ -674,59 +818,57 @@ As a specialist AI assistant, I have reviewed all queued reports. To find the tr
             entry["modality"] = chosen_modality
 
         with col_save:
-            # Save button — writes file to data/scans/ folder on disk
             already_saved = entry.get("saved_path")
-            save_label = "✅ Saved" if already_saved else "💾 Save"
-            if st.button(save_label, key=f"img_save_{idx}", use_container_width=True,
-                         help="Save this file to data/scans/ folder"):
+            if st.button(
+                "✅ Saved" if already_saved else "💾 Save",
+                key=f"img_save_{idx}",
+                use_container_width=True,
+            ):
                 try:
                     save_dir = os.path.join(
                         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                        "data", "scans"
+                        "data", "scans",
                     )
                     os.makedirs(save_dir, exist_ok=True)
-                    safe_modality = chosen_modality.replace("/", "-").replace(" ", "_")
+                    safe_mod  = chosen_modality.replace("/", "-").replace(" ", "_")
                     safe_name = entry["name"].replace(" ", "_")
-                    save_filename = f"{safe_modality}__{safe_name}"
-                    save_path = os.path.join(save_dir, save_filename)
+                    save_path = os.path.join(save_dir, f"{safe_mod}__{safe_name}")
                     with open(save_path, "wb") as fout:
                         fout.write(entry["bytes"])
                     entry["saved_path"] = save_path
-                    _add_log_safe(f"SCAN_SAVED:{save_filename}")
-                    st.success(f"✅ Saved to data/scans/{save_filename}")
+                    _add_log_safe(f"SCAN_SAVED:{safe_mod}__{safe_name}")
+                    st.success("✅ Saved")
                     st.rerun()
                 except Exception as e:
                     st.error(f"❌ Save failed: {e}")
 
         with col_del:
-            if st.button("🗑️ Delete", key=f"img_del_{idx}", use_container_width=True,
-                         help="Remove this scan"):
+            if st.button("🗑️ Delete", key=f"img_del_{idx}", use_container_width=True):
                 st.session_state.img_queue.pop(idx)
                 st.rerun()
 
-        # ── Image preview ─────────────────────────────────────────────────────
         if entry["name"].lower().endswith(".dcm"):
             st.warning("⚠️ DICOM — cannot render preview. AI will analyse metadata only.")
         else:
             st.image(entry["bytes"], use_container_width=True)
 
-        # ── Per-scan chat history ─────────────────────────────────────────────
         for msg in entry["chat"]:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
 
-        # ── Per-scan chat input ───────────────────────────────────────────────
         scan_input_col, scan_send_col = st.columns([11, 1])
         with scan_input_col:
             scan_msg = st.text_area(
-                label=f"scan_chat_{idx}", label_visibility="collapsed", value="",
-                placeholder="Ask about this scan — findings, risks, follow-up recommendations…",
-                height=68, key=f"img_scan_input_{idx}",
+                label=f"scan_chat_{idx}",
+                label_visibility="collapsed",
+                value="",
+                placeholder="Ask about this scan — findings, risks, follow-up…",
+                height=68,
+                key=f"img_scan_input_{idx}",
             )
         with scan_send_col:
             st.markdown("<div style='padding-top:28px'>", unsafe_allow_html=True)
-            scan_send = st.button("↑", key=f"img_scan_send_{idx}",
-                                  help="Send", use_container_width=True)
+            scan_send = st.button("↑", key=f"img_scan_send_{idx}", use_container_width=True)
             st.markdown("</div>", unsafe_allow_html=True)
 
         if scan_send and scan_msg and scan_msg.strip():
@@ -741,7 +883,6 @@ As a specialist AI assistant, I have reviewed all queued reports. To find the tr
             entry["chat"].append({"role": "assistant", "content": reply})
             st.rerun()
 
-        # ── Download report ───────────────────────────────────────────────────
         replies = [m["content"] for m in entry["chat"] if m["role"] == "assistant"]
         if replies:
             st.download_button(
