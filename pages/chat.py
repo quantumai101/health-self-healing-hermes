@@ -1,15 +1,8 @@
 """
 pages/chat.py — Agent Chat page
 
-Key deduplication approach: render_chat_widget(page_key=...) already namespaces
-all button keys under that prefix. The only way duplicates appeared was if
-render() was somehow invoked twice in the same Streamlit script execution.
-
-In Streamlit multipage, the page script is the entry point — render() at module
-level is called exactly once per rerun. No guard needed. The previous guards were
-actively causing the blank-screen regression by blocking re-renders.
-
-This version: no sentinel, no guard, just a clean try/except wrapper.
+The duplicate-key guard now lives inside core/chat_widget.py where the
+widgets are actually created. This file is intentionally simple.
 """
 import streamlit as st
 
@@ -70,15 +63,11 @@ def _render_inner() -> None:
             return _get_instance(next(iter(AGENT_REGISTRY.values()))).run(cmd)
         return "⚠️ No agents available."
 
-    # ── Conversation history ───────────────────────────────────────────────
     for msg in get_messages():
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    # ── Suggested ops + chat input ─────────────────────────────────────────
-    # page_key namespaces all widget keys — prevents collisions with other pages
     render_chat_widget(page_key="chat")
 
 
-# ── Multipage entrypoint — called once per rerun by Streamlit's router ─────
 render()
