@@ -15,3 +15,5 @@ data/scans/
 data/users/
 data/users/
 data/users/
+data/ctca_slices/*.jpg
+data/ctca_slices/*.jpeg
