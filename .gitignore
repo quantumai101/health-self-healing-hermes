@@ -17,3 +17,16 @@ data/users/
 data/users/
 data/ctca_slices/*.jpg
 data/ctca_slices/*.jpeg
+*.bak
+*.db
+*.pt
+*.pkl
+*.bin
+mlruns/
+models/
+data/brain_mlflow.db
+advanced_clinical_report*.txt
+ctca_result.txt
+slice_findings.json
+metrics_manifest*.json
+List
