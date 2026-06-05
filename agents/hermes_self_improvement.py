@@ -76,7 +76,7 @@ except ImportError:
 MODELS           = ["gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-3.1-flash"]
 SCORE_THRESHOLD  = 7          # files scoring below this get rewritten
 CYCLE_HOURS      = 2          # how often the daemon runs
-MAX_FILE_CHARS   = 12_000     # truncate large files before sending to Gemini
+MAX_FILE_CHARS   = 20_000     # increased: prevents truncation of large files
 LOG_FILE         = "self_improvement_log.md"
 BACKUP_SUFFIX    = ".bak"
 
@@ -88,6 +88,13 @@ AUDIT_TARGETS = [
     "pages/dashboard.py",
     "pages/chat.py",
     "auth/session.py",
+]
+
+# ── Protected files — critiqued but NEVER auto-rewritten ─────────────────────
+# Add files with patient-specific UI or hand-crafted logic that must not
+# be overwritten by the AI agent even if they score below threshold.
+PROTECTED_FILES = [
+    "pages/dashboard.py",    # contains CTCA simulation button (ZHANG, ZHIMING)
 ]
 
 # ── Gemini client ─────────────────────────────────────────────────────────────
@@ -326,6 +333,10 @@ def run_improvement_cycle():
         path = root / rel_path
         print(f"\n📄  Auditing: {rel_path}")
 
+        # ── PROTECTED FILE CHECK ─────────────────────────────────────────────
+        # Protected files are critiqued (for awareness) but never auto-rewritten
+        is_protected = rel_path in PROTECTED_FILES
+
         # ── STEP 1: AUDIT ────────────────────────────────────────────────────
         code = audit_file(path)
         if code is None:
@@ -346,6 +357,14 @@ def run_improvement_cycle():
             print(f"   ⏭  Score {score} ≥ {SCORE_THRESHOLD} — no rewrite needed")
             results.append({"file": rel_path, "skipped": True,
                             "score": score, "issues": issues})
+            continue
+
+        # ── PROTECTED: show issues but skip rewrite ───────────────────────────
+        if is_protected:
+            print(f"   🔒 PROTECTED — issues noted but rewrite blocked")
+            print(f"      To manually fix, edit {rel_path} directly")
+            results.append({"file": rel_path, "skipped": True,
+                            "protected": True, "score": score, "issues": issues})
             continue
 
         # ── STEP 3: IMPROVE ──────────────────────────────────────────────────
