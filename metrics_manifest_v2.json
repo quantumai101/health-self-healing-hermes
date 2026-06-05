@@ -1,0 +1,81 @@
+{
+    "patient_metadata": {
+        "name": "ZHANG, ZHIMING",
+        "dob": "1955-03-14",
+        "gender": "Male",
+        "scan_date": "2026-04-20",
+        "total_slices": 2849,
+        "volume_id": "16080000",
+        "age_years": 71
+    },
+    "agatston_calcium_score": {
+        "left_main": {
+            "agatston": 0,
+            "volume_mm3": 0
+        },
+        "left_anterior_descending": {
+            "agatston": 42,
+            "volume_mm3": 31.4,
+            "segment": "pLAD"
+        },
+        "left_circumflex": {
+            "agatston": 0,
+            "volume_mm3": 0
+        },
+        "right_coronary_artery": {
+            "agatston": 8,
+            "volume_mm3": 6.1,
+            "segment": "mRCA"
+        },
+        "total_agatston": 50,
+        "percentile_rank_age_sex_matched": "45th percentile mild burden for 71yr male",
+        "cad_rads_modifier": "S modifier not triggered"
+    },
+    "nnunet_lumen_geometry": {
+        "left_anterior_descending": {
+            "stenosis_geometric_pct": 17.3,
+            "reference_lumen_diameter_mm": 3.2,
+            "minimal_lumen_diameter_mm": 2.65,
+            "plaque_arc_degrees": 140,
+            "eccentricity_index": 0.78
+        },
+        "right_coronary_artery": {
+            "stenosis_geometric_pct": 12.1,
+            "reference_lumen_diameter_mm": 3.5,
+            "minimal_lumen_diameter_mm": 3.08,
+            "plaque_arc_degrees": 95,
+            "eccentricity_index": 0.44
+        }
+    },
+    "medsam2_perivascular_fat": {
+        "pLAD_FAI_HU": -68.4,
+        "mRCA_FAI_HU": -76.1,
+        "FAI_inflammation_threshold_HU": -70.1,
+        "pLAD_inflammation_flag": "BORDERLINE FAI above threshold low-level pericoronary inflammation possible",
+        "mRCA_inflammation_flag": "NEGATIVE within normal adipose range"
+    },
+    "totalsegmentator_ventricular": {
+        "left_ventricle_volume_ml": 142.3,
+        "right_ventricle_volume_ml": 138.7,
+        "left_ventricle_wall_thickness_mm": 11.2,
+        "right_ventricle_wall_thickness_mm": 4.1,
+        "estimated_ejection_fraction_pct": 58.2,
+        "lv_mass_g": 198.4,
+        "lv_mass_index_gm2": 102.1,
+        "lv_hypertrophy_flag": "Borderline index at upper normal limit for age-matched cohort"
+    },
+    "monai_plaque_hu_histogram": {
+        "pLAD_calcified_core_HU_range": "420-510",
+        "pLAD_fibrous_cap_HU_range": "90-130",
+        "mRCA_lipid_pool_HU_range": "40-80",
+        "mRCA_fibrous_cap_HU_range": "100-140",
+        "napkin_ring_sign": false,
+        "positive_remodeling_index_pLAD": 1.08,
+        "positive_remodeling_index_mRCA": 1.04
+    },
+    "mitral_valve": {
+        "coaptation_status": "Intact",
+        "regurgitation_grade": "Trace Grade 0-1",
+        "structural_restriction": false
+    }
+}

@@ -5,8 +5,8 @@ Renders the main chat interface for Health Digital Workforce.
 Security & Safety Improvements:
   • Integrated Microsoft Presidio for robust PII/PHI redaction.
   • Implemented RBAC-based authorization for high-impact operations.
-  • Enforced persistent clinical disclaimer acceptance via session state.
-  • Added server-side audit logging for all agent interactions.
+  • Enforced strict allow-list dispatching to prevent injection.
+  • Deny-by-default authorization policy.
 """
 
 from __future__ import annotations
@@ -27,28 +27,39 @@ DISCLAIMER_TEXT = "⚠️ **CLINICAL DISCLAIMER:** AI outputs are for decision s
 MAX_INPUT_LENGTH = 2000
 MAX_SESSION_MESSAGES = 50
 HIGH_IMPACT_ROLES = ["admin", "clinician"]
+DEFAULT_AGENT = "NOVA"
 
-# Initialize PII Engine
 @lru_cache(maxsize=1)
 def _get_pii_engine():
     return AnalyzerEngine(), AnonymizerEngine()
 
 def _redact_pii(text: str) -> str:
-    """Uses Presidio to identify and mask PII/PHI entities."""
+    """
+    Uses Presidio to mask PII/PHI. 
+    Raises Exception on failure to prevent raw data leakage to logs.
+    """
     try:
         analyzer, anonymizer = _get_pii_engine()
         results = analyzer.analyze(text=text, language='en', entities=["PERSON", "PHONE_NUMBER", "SSN", "EMAIL_ADDRESS"])
         return anonymizer.anonymize(text=text, analyzer_results=results).text
     except Exception as e:
         logger.error(f"PII Redaction failure: {e}")
-        return "[REDACTION_ERROR]"
+        # Fail closed: do not return raw text if redaction fails
+        raise RuntimeError("PII redaction failed; request blocked for safety.")
 
 def _check_authorization(agent_name: str) -> bool:
-    """Verifies if the current user has permission to execute specific agent tasks."""
+    """
+    Verifies if the current user has permission to execute specific agent tasks.
+    Implements a deny-by-default policy.
+    """
     user_role = get_user_role()
+    # High impact agents require elevated roles
     if agent_name in ["PROMETHEUS", "NEXUS", "SENTINEL"]:
         return user_role in HIGH_IMPACT_ROLES
-    return True
+    # Default agents are allowed for all authenticated users
+    if agent_name == DEFAULT_AGENT:
+        return True
+    return False
 
 @lru_cache(maxsize=32)
 def _get_agent(name: str):
@@ -61,17 +72,14 @@ def _get_agent(name: str):
 
 @lru_cache(maxsize=1)
 def _get_dispatch_map():
-    commands, keywords = {}, []
+    """Returns a strict mapping of exact trigger commands to agents."""
+    commands = {}
     for name in AGENT_REGISTRY:
         agent = _get_agent(name)
-        if agent:
-            if hasattr(agent, "TRIGGER_COMMANDS"):
-                for cmd in agent.TRIGGER_COMMANDS:
-                    commands[cmd.strip().lower()] = name
-            if hasattr(agent, "KEYWORDS"):
-                for kw in agent.KEYWORDS:
-                    keywords.append((kw.lower(), name))
-    return commands, keywords
+        if agent and hasattr(agent, "TRIGGER_COMMANDS"):
+            for cmd in agent.TRIGGER_COMMANDS:
+                commands[cmd.strip().lower()] = name
+    return commands
 
 def _safe_run_agent(agent, command: str) -> str:
     try:
@@ -81,26 +89,32 @@ def _safe_run_agent(agent, command: str) -> str:
         return "❌ **System Error:** The agent encountered an issue processing your request."
 
 def _dispatch(user_input: str) -> str:
+    """
+    Routes user input to agents using a strict allow-list.
+    Prevents keyword-based injection by requiring exact command matches.
+    """
     try:
         clean_input = user_input.strip()
-        add_log(f"DISPATCH_REQUEST: {_redact_pii(clean_input)}")
         
-        cmd_map, kw_list = _get_dispatch_map()
-        low_input = clean_input.lower()
+        # Redact before logging
+        try:
+            redacted = _redact_pii(clean_input)
+            add_log(f"DISPATCH_REQUEST: {redacted}")
+        except Exception:
+            return "❌ **Security Error:** Unable to process request due to privacy constraints."
         
-        agent_name = cmd_map.get(low_input)
-        if not agent_name:
-            for kw, name in kw_list:
-                if kw in low_input:
-                    agent_name = name
-                    break
+        cmd_map = _get_dispatch_map()
+        agent_name = cmd_map.get(clean_input.lower(), DEFAULT_AGENT)
         
-        target_agent = _get_agent(agent_name) if agent_name else _get_agent("NOVA")
-        
-        if not _check_authorization(agent_name or "NOVA"):
+        # Deny-by-default authorization check
+        if not _check_authorization(agent_name):
             return "🚫 **Access Denied:** You do not have permission to execute this operation."
             
-        return _safe_run_agent(target_agent, clean_input) if target_agent else "I'm sorry, I couldn't route that request."
+        target_agent = _get_agent(agent_name)
+        if not target_agent:
+            return "I'm sorry, I couldn't route that request."
+            
+        return _safe_run_agent(target_agent, clean_input)
     except Exception as e:
         logger.error(f"Dispatch error: {e}", exc_info=True)
         return "❌ **Dispatch Error:** Unable to route request."

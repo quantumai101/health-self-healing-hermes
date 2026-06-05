@@ -1,0 +1,54 @@
+# HERMES VISION — CTCA Heart Scan Analysis
+Folder: I:/CTCA Heart Scan DVD 20April2026/DICOM/26052505/16080000
+Total: 2849 | Sampled: 5 (every 10th, max 5)
+Window: cardiac | Model: llava:7b
+
+---
+
+### Slice 1/5 (file: 77172471)
+Orientation:   N/A
+Anatomy:       N/A
+Quality:       N/A
+Abnormalities: N/A
+Impression:    N/A
+
+---
+
+### Slice 2/5 (file: 77172581)
+Orientation:   N/A
+Anatomy:       N/A
+Quality:       N/A
+Abnormalities: N/A
+Impression:    N/A
+
+---
+
+### Slice 3/5 (file: 77172691)
+Orientation:   N/A
+Anatomy:       N/A
+Quality:       N/A
+Abnormalities: N/A
+Impression:    N/A
+
+---
+
+### Slice 4/5 (file: 77172801)
+Orientation:   N/A
+Anatomy:       N/A
+Quality:       N/A
+Abnormalities: N/A
+Impression:    N/A
+
+---
+
+### Slice 5/5 (file: 77172911)
+Orientation:   N/A
+Anatomy:       N/A
+Quality:       N/A
+Abnormalities: N/A
+Impression:    N/A
+
+---
+
+
+✅ HTML report saved: I:\CTCA Heart Scan DVD 20April2026\DICOM\CTCA_Analysis_Report.html

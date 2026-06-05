@@ -1,0 +1,46 @@
+{
+  "pLAD_calcified": {
+    "label": "pLAD \u2014 Proximal Calcified Plaque (17.3% stenosis)",
+    "hu_window": "420\u2013510 HU calcified core",
+    "top_slices": [
+      "77176255",
+      "77176299",
+      "77176332",
+      "77176321",
+      "77176354"
+    ]
+  },
+  "mRCA_soft_lipid": {
+    "label": "mRCA \u2014 Mid Soft Lipid Plaque (12.1% stenosis)",
+    "hu_window": "40\u201380 HU lipid pool",
+    "top_slices": [
+      "77180149",
+      "77180094",
+      "77180116",
+      "77180193",
+      "77180127"
+    ]
+  },
+  "pLAD_FAI": {
+    "label": "pLAD \u2014 Perivascular Fat (FAI -68.4 HU BORDERLINE)",
+    "hu_window": "-90 to -50 HU pericoronary fat",
+    "top_slices": [
+      "77182778",
+      "77182822",
+      "77182866",
+      "77182855",
+      "77182833"
+    ]
+  },
+  "lumen_contrast": {
+    "label": "Coronary Lumen \u2014 Peak Contrast Enhancement",
+    "hu_window": "200\u2013500 HU contrast lumen",
+    "top_slices": [
+      "77177300",
+      "77177311",
+      "77184923",
+      "77192502",
+      "77184912"
+    ]
+  }
+}

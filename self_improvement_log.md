@@ -577,3 +577,358 @@
   - Sensitive auth tokens are exposed in browser URL query parameters, which may be logged by proxies, browser history, or analytics tools.
   - The session state relies on client-side URL parameters for persistence, creating a potential vector for session fixation or manipulation.
   - Lack of explicit CSRF protection for the logout/revoke flow.
+
+## 🔁 Self-Improvement Cycle — 2026-06-05 15:32
+
+### agents/clinical_ensemble_orchestrator_v2.py — ✅ IMPROVED
+- Score: **6/10**
+- Issues fixed:
+  - PII sanitization logic is flawed; Presidio on a JSON string often breaks structure and fails to identify nested clinical identifiers
+  - Lack of human-in-the-loop verification for AI-generated clinical assessments
+  - Insecure configuration management; environment variables are accessed via static methods rather than a robust configuration provider
+
+### agents/psa_clinical_orchestrator_v3.py — ✅ IMPROVED
+- Score: **7/10**
+- Issues fixed:
+  - Lack of audit trail for PHI redaction failures (silent failures in redaction could lead to PHI leakage)
+  - Hardcoded system prompt lacks clinical context versioning or rigorous validation
+  - Global ThreadPoolExecutor lacks dynamic scaling or monitoring for high-concurrency medical workloads
+
+### pages/imaging.py — ✅ IMPROVED
+- Score: **7/10**
+- Issues fixed:
+  - Insecure temporary file naming using predictable MD5 of filename leads to potential collisions and race conditions
+  - Lack of persistent cleanup mechanism for orphaned temporary files if the session expires or the app crashes
+  - MIME type validation relies on magic library which can be bypassed by crafted file headers
+
+### pages/dashboard.py — ⏭ SKIPPED
+- Score: **8/10**
+- Issues fixed:
+  - PII masking is applied only to the final table, leaving raw data exposed in the scatter plot hover_data and metrics
+  - The @st.cache_data decorator is inside the function, which may cause unexpected behavior or re-execution issues
+  - Lack of explicit input validation for the dataframe schema before processing
+
+### pages/chat.py — ✅ IMPROVED
+- Score: **7/10**
+- Issues fixed:
+  - PII redaction failure defaults to returning [REDACTION_ERROR] instead of blocking the request, potentially leaking raw data to logs or agents.
+  - The dispatch logic relies on string matching which is prone to prompt injection or unintended agent triggering.
+  - Lack of input sanitization beyond length checks; potential for injection attacks if agents process raw user input.
+
+### auth/session.py — ⏭ SKIPPED
+- Score: **8/10**
+- Issues fixed:
+  - Sensitive auth tokens are exposed in browser URL query parameters, which may be logged by proxies, browser history, or analytics tools.
+  - The session state relies on client-side URL parameters for persistence, creating a potential vector for session fixation or manipulation.
+  - Lack of explicit CSRF protection for the logout/revoke flow.
+
+## 🔁 Self-Improvement Cycle — 2026-06-05 15:49
+
+### agents/clinical_ensemble_orchestrator_v2.py — ⏭ SKIPPED
+- Score: **7/10**
+- Issues fixed:
+  - PII sanitization is performed after Pydantic validation, potentially leaking raw data into logs or memory before masking
+  - Recursive sanitization logic is inefficient and may fail on complex nested structures or non-string types
+  - Lack of asynchronous I/O for network-bound LLM calls leads to blocking execution in a production pipeline
+
+### agents/psa_clinical_orchestrator_v3.py — ⏭ SKIPPED
+- Score: **8/10**
+- Issues fixed:
+  - Blocking synchronous I/O (redaction/LLM) inside a thread pool is inefficient for high-concurrency medical workloads compared to native async SDK calls.
+  - Lack of audit logging for the specific model version or prompt version used in the clinical decision.
+  - The redaction logic uses a generic JSON dump which may inadvertently leak PHI if the structure contains nested keys not covered by Presidio's default recognizers.
+
+### pages/imaging.py — ⏭ SKIPPED
+- Score: **7/10**
+- Issues fixed:
+  - Persistent temp directory in global scope is not thread-safe and risks memory leaks in multi-user environments
+  - Streamlit's file_uploader re-runs the entire script on interaction, causing redundant file processing and disk I/O
+  - Lack of explicit file path sanitization or validation against directory traversal attacks
+
+### pages/dashboard.py — ⏭ SKIPPED
+- Score: **8/10**
+- Issues fixed:
+  - PII masking is applied only to the final table, leaving raw data exposed in the scatter plot hover_data and metrics
+  - The @st.cache_data function is defined inside the render function, causing it to be redefined on every execution
+  - Lack of explicit input validation for the dataframe schema before processing
+
+### pages/chat.py — ⏭ SKIPPED
+- Score: **8/10**
+- Issues fixed:
+  - PII redaction is performed after the user input is already appended to the session state, potentially leaking PHI into the session store.
+  - The use of lru_cache on functions returning objects (like agents) can lead to memory leaks or stale state if agents maintain internal session context.
+  - The clinical disclaimer is only shown once; it should be enforced more persistently or integrated into the chat stream for auditability.
+
+### auth/session.py — ⏭ SKIPPED
+- Score: **8/10**
+- Issues fixed:
+  - Sensitive auth tokens are exposed in browser URL query parameters, which may be logged by proxies, browser history, or analytics tools.
+  - The session persistence relies on client-side URL state, which is inherently mutable and less secure than HTTP-only cookies.
+  - Lack of explicit CSRF protection for the session management flow.
+
+## 🔁 Self-Improvement Cycle — 2026-06-05 17:33
+
+### agents/clinical_ensemble_orchestrator_v2.py — ✅ IMPROVED
+- Score: **7/10**
+- Issues fixed:
+  - PII sanitization logic is inefficient and potentially incomplete for nested structures
+  - Logging configuration is global and side-effect heavy, conflicting with structlog setup
+  - Lack of asynchronous execution for LLM calls leads to blocking I/O in a pipeline
+
+### agents/psa_clinical_orchestrator_v3.py — ⏭ SKIPPED
+- Score: **8/10**
+- Issues fixed:
+  - Blocking synchronous I/O (redaction/LLM) inside a thread pool is inefficient for high-concurrency medical workloads compared to native async SDK calls.
+  - Lack of audit logging for the specific model version or prompt version used in the final assessment.
+  - Potential for PHI leakage if the redaction engine fails to identify non-standard PII formats in unstructured metadata.
+
+### pages/imaging.py — ✅ IMPROVED
+- Score: **7/10**
+- Issues fixed:
+  - Insecure global temp directory management: TEMP_BASE_DIR is shared across sessions, leading to potential cross-user data leakage.
+  - Streamlit state management: The file uploader triggers re-processing of all files on every rerun, causing significant performance overhead.
+  - Incomplete file cleanup: Files are only removed on explicit button clicks or app shutdown, risking disk exhaustion in production.
+
+### pages/dashboard.py — ✅ IMPROVED
+- Score: **7/10**
+- Issues fixed:
+  - PII exposure in Plotly hover_data (patient_id, region, etc.)
+  - Lack of explicit authorization checks before rendering patient data
+  - Potential for data leakage if get_mock_df() is used in production environments
+
+### pages/chat.py — ⏭ SKIPPED
+- Score: **8/10**
+- Issues fixed:
+  - PII redaction is performed after the user input is already stored in session state via append_message
+  - lru_cache on _get_agent and _get_dispatch_map may lead to stale registry states if agents are dynamically updated
+  - Lack of audit logging for authorization failures (only successful requests are logged)
+
+### auth/session.py — ⏭ SKIPPED
+- Score: **8/10**
+- Issues fixed:
+  - Sensitive auth tokens are exposed in browser URL query parameters, which may be logged by proxies, browser history, or analytics tools.
+  - The session state relies on client-side URL parameters for persistence, creating a potential vector for session fixation or manipulation.
+  - Lack of explicit CSRF protection for the logout/revoke flow.
+
+## 🔁 Self-Improvement Cycle — 2026-06-05 17:49
+
+### agents/clinical_ensemble_orchestrator_v2.py — ✅ IMPROVED
+- Score: **6/10**
+- Issues fixed:
+  - Global side effects in setup_logging() and module-level execution
+  - PII sanitization logic is inefficient and potentially destructive to clinical context
+  - Lack of audit logging for PII handling and model inputs/outputs
+
+### agents/psa_clinical_orchestrator_v3.py — ⏭ SKIPPED
+- Score: **8/10**
+- Issues fixed:
+  - Blocking synchronous I/O (redaction/LLM) inside a thread pool is inefficient for high-concurrency medical workloads compared to native async SDK calls.
+  - Lack of audit logging for the specific model version or prompt version used in the clinical decision.
+  - The redaction logic uses a generic JSON dump which may inadvertently leak PHI if the structure is nested or contains non-standard keys not covered by Presidio.
+
+### pages/imaging.py — ⏭ SKIPPED
+- Score: **7/10**
+- Issues fixed:
+  - Insecure use of @st.cache_data with file bytes, which can lead to massive memory consumption and potential OOM errors
+  - Race conditions in file cleanup: atexit is unreliable in multi-threaded/multi-process Streamlit environments
+  - Lack of PII/PHI scrubbing before storage; files are saved to disk with original metadata intact
+
+### pages/dashboard.py — ⏭ SKIPPED
+- Score: **7/10**
+- Issues fixed:
+  - PII exposure in the 'High-Risk Patients' table without explicit audit logging or row-level security enforcement
+  - Potential for data leakage if mock data is accidentally served in production due to weak environment validation
+  - Lack of explicit input validation on the dataframe before processing, which could lead to runtime errors with malformed clinical data
+
+### pages/chat.py — ⏭ SKIPPED
+- Score: **8/10**
+- Issues fixed:
+  - PII redaction is performed after the user input is already stored in session state via append_message
+  - lru_cache on _get_agent and _get_dispatch_map may lead to stale registry states if agents are dynamically updated
+  - Lack of audit logging for authorization failures (only successful requests are logged)
+
+### auth/session.py — ⏭ SKIPPED
+- Score: **8/10**
+- Issues fixed:
+  - Sensitive auth tokens are exposed in browser URL query parameters, which may be logged by proxies, browser history, or analytics tools.
+  - The session state relies on client-side URL parameters for persistence, creating a potential vector for session fixation or manipulation.
+  - Lack of explicit CSRF protection for the logout/revoke flow.
+
+## 🔁 Self-Improvement Cycle — 2026-06-05 19:34
+
+### agents/clinical_ensemble_orchestrator_v2.py — ✅ IMPROVED
+- Score: **5/10**
+- Issues fixed:
+  - Blocking synchronous I/O and CPU-bound Presidio operations in the main event loop
+  - Insecure PII handling: Sanitization is performed after model-ready JSON serialization, creating a race condition/leak window
+  - Lack of human-in-the-loop verification mechanism despite the 'human_review_required' flag
+  - Inadequate logging of PII-related failures and potential exposure in logs
+
+### agents/psa_clinical_orchestrator_v3.py — ⏭ SKIPPED
+- Score: **8/10**
+- Issues fixed:
+  - Blocking synchronous I/O (redaction/LLM calls) inside a thread pool is inefficient for high-concurrency medical workloads
+  - Lack of audit logging for clinical decisions (only logs to stdout)
+  - Potential for PHI leakage if the redaction engine fails to identify non-standard PII formats
+
+### pages/imaging.py — ✅ IMPROVED
+- Score: **7/10**
+- Issues fixed:
+  - Insecure use of @st.cache_data with file bytes, leading to potential memory exhaustion
+  - Race conditions in file cleanup and session directory management
+  - Lack of PII/PHI scrubbing before storing files in temporary local storage
+
+### pages/dashboard.py — ✅ IMPROVED
+- Score: **5/10**
+- Issues fixed:
+  - Hardcoded PII in UI buttons (e.g., ZHANG ZHIMING) violates HIPAA/GDPR principles
+  - Insecure 'chat_prefill' mechanism allows prompt injection and potential execution of administrative tasks (e.g., rotating API secrets)
+  - Lack of granular access control; the dashboard exposes sensitive clinical data to any authorized user without role-based filtering
+  - Data loading logic is tightly coupled with UI rendering, making unit testing difficult
+  - Masking logic is insufficient; partial masking of IDs is often reversible via linkage attacks
+
+### pages/chat.py — ⏭ SKIPPED
+- Score: **8/10**
+- Issues fixed:
+  - PII redaction is performed after the user input is already stored in session state via append_message
+  - lru_cache on _get_agent and _get_dispatch_map may lead to stale registry states if agents are dynamically updated
+  - Lack of audit logging for authorization failures (only successful requests are logged)
+
+### auth/session.py — ⏭ SKIPPED
+- Score: **8/10**
+- Issues fixed:
+  - Sensitive auth tokens are exposed in browser URL query parameters, which may be logged by proxies, browser history, or analytics tools.
+  - The session state relies on client-side URL parameters for persistence, creating a potential vector for session fixation or manipulation.
+  - Lack of explicit CSRF protection for the logout/revoke flow.
+
+## 🔁 Self-Improvement Cycle — 2026-06-05 19:50
+
+### agents/clinical_ensemble_orchestrator_v2.py — ⏭ SKIPPED
+- Score: **7/10**
+- Issues fixed:
+  - Blocking synchronous I/O (Presidio/Gemini) inside an async event loop via ThreadPoolExecutor is inefficient and risks thread starvation.
+  - The PII sanitization logic is recursive and potentially slow, and the 'verify_pii_masking' check is redundant if the data was just anonymized.
+  - The use of 'print' for critical clinical alerts is insufficient for a production medical system; it lacks an audit trail or notification integration.
+
+### agents/psa_clinical_orchestrator_v3.py — ⏭ SKIPPED
+- Score: **8/10**
+- Issues fixed:
+  - Blocking synchronous I/O (redaction/LLM) inside a thread pool is inefficient for high-concurrency medical workloads compared to native async SDK calls.
+  - Lack of audit logging for the specific model version or prompt version used in the final assessment.
+  - The redaction engine is initialized globally without explicit configuration for medical entity recognition (e.g., custom Presidio recognizers for clinical context).
+
+### pages/imaging.py — ✅ IMPROVED
+- Score: **5/10**
+- Issues fixed:
+  - Incomplete PHI scrubbing: Only a small subset of DICOM tags are redacted, leaving many others (e.g., StudyInstanceUID, PatientSex, PhysicianName) exposed.
+  - Insecure file handling: Files are stored in a predictable temp directory structure without strict permissions or encryption at rest.
+  - Memory inefficiency: Using f.getvalue() on large files loads the entire file into RAM, which will cause OOM errors with multiple concurrent users.
+
+### pages/dashboard.py — ⏭ SKIPPED
+- Score: **7/10**
+- Issues fixed:
+  - Insecure default salt for pseudonymization in environment variables
+  - Potential PII leakage in plotly hover_data for high-risk patients
+  - Lack of audit logging for sensitive clinical operations triggered via chat
+
+### pages/chat.py — ⏭ SKIPPED
+- Score: **8/10**
+- Issues fixed:
+  - PII redaction is applied to user input but not explicitly to agent output, risking PHI leakage in responses.
+  - The use of lru_cache on functions returning objects (like agents) may lead to stale state or memory leaks in long-running sessions.
+  - Clinical disclaimer is only shown once per session; it should be persistent or more prominent to ensure continuous awareness.
+
+### auth/session.py — ⏭ SKIPPED
+- Score: **8/10**
+- Issues fixed:
+  - Sensitive auth tokens are exposed in browser URL query parameters, which may be logged by proxies, browser history, or analytics tools.
+  - The session state relies on client-side URL parameters for persistence, creating a potential vector for session fixation or manipulation.
+  - Lack of explicit CSRF protection for the logout/revoke flow.
+
+## 🔁 Self-Improvement Cycle — 2026-06-05 21:35
+
+### agents/clinical_ensemble_orchestrator_v2.py — ✅ IMPROVED
+- Score: **7/10**
+- Issues fixed:
+  - Blocking synchronous I/O (Presidio/Gemini) inside an async event loop via ThreadPoolExecutor is inefficient and risks thread starvation.
+  - The PII sanitization logic is recursive and potentially slow, and the 'verify_pii_masking' check is a reactive post-process rather than a proactive guard.
+  - The use of 'print' statements for critical clinical alerts is insufficient for a production medical system; it lacks integration with an alerting or audit trail system.
+
+### agents/psa_clinical_orchestrator_v3.py — ⏭ SKIPPED
+- Score: **8/10**
+- Issues fixed:
+  - Blocking synchronous I/O (redaction/LLM) inside a thread pool is inefficient for high-concurrency medical workloads compared to native async SDKs.
+  - Lack of audit logging for the specific model version or prompt version used in the clinical decision.
+  - The redaction engine is initialized globally without explicit configuration for medical entity recognition (e.g., custom Presidio recognizers for clinical context).
+
+### pages/imaging.py — ✅ IMPROVED
+- Score: **6/10**
+- Issues fixed:
+  - Incomplete PHI scrubbing: Manual tag removal is insufficient for DICOM; private tags and pixel-embedded PHI remain.
+  - Insecure file cleanup: atexit is unreliable in Streamlit's multi-threaded/multi-session environment, leading to potential storage leaks.
+  - Path Traversal/Race Conditions: Using UUIDs is good, but file operations lack atomic checks and strict permission enforcement.
+
+### pages/dashboard.py — ✅ IMPROVED
+- Score: **7/10**
+- Issues fixed:
+  - Insecure default salt for pseudonymization in production environment
+  - Potential PII leakage via Plotly hover_data in the scatter plot
+  - Lack of audit logging for clinical operations triggered via chat_prefill
+
+### pages/chat.py — ⏭ SKIPPED
+- Score: **8/10**
+- Issues fixed:
+  - PII redaction is performed after the message is already appended to session state, potentially leaking PHI into memory/logs
+  - The use of lru_cache on functions returning objects (like agents) can lead to stale state or memory leaks in long-running sessions
+  - Lack of audit logging for authorization failures (denied attempts)
+
+### auth/session.py — ⏭ SKIPPED
+- Score: **8/10**
+- Issues fixed:
+  - Sensitive auth tokens are exposed in browser URL query parameters, which may be logged by proxies, browser history, or analytics tools.
+  - The session persistence relies on client-side URL state which is inherently mutable and insecure for high-stakes medical data.
+  - Lack of explicit CSRF protection for the logout/revoke flow.
+
+## 🔁 Self-Improvement Cycle — 2026-06-05 21:50
+
+### agents/clinical_ensemble_orchestrator_v2.py — ⏭ SKIPPED
+- Score: **7/10**
+- Issues fixed:
+  - PII sanitization inside model_validator is inefficient and blocks instantiation
+  - Logging configuration is global and potentially destructive to existing handlers
+  - Lack of audit trail for clinical decisions beyond local file logs
+
+### agents/psa_clinical_orchestrator_v3.py — ⏭ SKIPPED
+- Score: **8/10**
+- Issues fixed:
+  - Blocking synchronous I/O (redaction/LLM) inside a thread pool is inefficient for high-concurrency medical workloads compared to native async SDK calls.
+  - Lack of audit logging for the specific model version or prompt version used in the clinical decision.
+  - The redaction engine is initialized globally without explicit configuration for medical entity recognition (e.g., custom Presidio recognizers for lab-specific PHI).
+
+### pages/imaging.py — ⏭ SKIPPED
+- Score: **7/10**
+- Issues fixed:
+  - Incomplete PHI scrubbing (DICOM metadata is complex; manual list is insufficient for HIPAA compliance)
+  - Race condition in session cleanup (runtime.on_session_end is not guaranteed to trigger in all Streamlit deployment scenarios)
+  - Lack of file path sanitization (potential for path traversal if file names are manipulated)
+
+### pages/dashboard.py — ⏭ SKIPPED
+- Score: **7/10**
+- Issues fixed:
+  - Pseudonymization is applied too late in the pipeline, potentially exposing raw PII in memory or logs before masking.
+  - Inconsistent environment variable handling (e.g., default_dev_salt fallback is a security risk if accidentally triggered in production).
+  - Lack of audit logging for data access; only clinical actions are logged, missing the 'who viewed what' requirement for HIPAA compliance.
+
+### pages/chat.py — ⏭ SKIPPED
+- Score: **8/10**
+- Issues fixed:
+  - PII redaction is applied to the log but not to the actual LLM prompt/agent input, creating a potential data leakage vector.
+  - The use of lru_cache on functions returning objects (like agents) can lead to stale state or memory leaks in long-running sessions.
+  - Clinical disclaimer is only shown once per session; it should be persistent or re-verified for high-impact operations.
+
+### auth/session.py — ⏭ SKIPPED
+- Score: **8/10**
+- Issues fixed:
+  - Sensitive auth tokens are exposed in browser URL query parameters, which may be logged by proxies, browser history, or analytics tools.
+  - The session state relies on client-side URL parameters for persistence, which is vulnerable to URL manipulation or leakage.
+  - Lack of explicit CSRF protection for the logout/revoke flow.

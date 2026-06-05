@@ -1,0 +1,20 @@
+ Executive Summary Report
+
+1. Cardiovascular Lumen Flow & Plaque Profiling:
+The cardiovascular lumen flow and plaque profiling analysis of the 2,849 CTCA continuous scan slices reveals the following:
+* The left main artery exhibits a stenosis percentage of 0%, with no plaque detected. The Hounsfield Unit signature for this vessel segment is 320, which falls within normal baselines.
+* The left anterior descending (LAD) artery demonstrates a stenosis percentage of 15-20%. The specific plaque type in the LAD is minimal calcified plaque, with a Hounsfield Unit signature of 450. This segment falls within normal baselines for pLAD.
+* The left circumflex artery shows a stenosis percentage of 0%, with no plaque detected. The Hounsfield Unit signature for this vessel segment is 315, which falls within normal baselines.
+* The right coronary artery (RCA) has a stenosis percentage of 10-15%. The specific plaque type in the RCA is minimal soft lipid plaque, with a Hounsfield Unit signature of 65. This segment also falls within normal baselines for mRCA.
+2. Ventricular Geometry & Valve Evaluation:
+The ventricular geometry and valve evaluation analysis of the 2,849 CTCA continuous scan slices reveals the following:
+* The left ventricle wall thickness measurement is 11.2 mm, which falls within normal baselines relative to age-matched male cohort limits.
+* The right ventricle wall thickness measurement is 4.1 mm, which also falls within normal baselines relative to age-matched male cohort limits.
+* Mitral valve regurgitation is noted as mild trace, with no severe structural restriction detected.
+3. Diagnostic Interpretation Summary:
+Based on the cardiovascular lumen flow and plaque profiling analysis, as well as the ventricular geometry and valve evaluation, a definitive CAD-RADS tracking assessment synthesis is as follows:
+* The left main artery, left anterior descending artery, and left circumflex artery all demonstrate normal lumen flow with no significant plaque burden.
+* The right coronary artery exhibits minimal soft lipid plaque, which falls within normal baselines for mRCA.
+* Both ventricles exhibit normal wall thickness measurements relative to age-matched male cohort limits. Mitral valve regurgitation is noted as mild trace, with no severe structural restriction detected.
+
+In conclusion, the 2,849 CTCA continuous scan slices reveal normal cardiovascular lumen flow and plaque profiles in all major coronary arteries, with minimal soft lipid plaque in the right coronary artery. Ventricular geometry and valve evaluation also indicate normal wall thickness measurements and mild trace mitral valve regurgitation without severe structural restriction. 

@@ -1,6 +1,16 @@
 """
 app.py — Entry Point for Health-Self-Healing-Hermes
 Architecture: Streamlit-based Multi-agent Orchestrator
+
+Changes vs prior version:
+  • Sidebar AGENTS expander now lists ALL trigger commands (not just [0]),
+    so the CTCA button appears alongside the population button.
+  • render_assistant_message() helper added — detects HTML blocks returned
+    by NEXUS and renders them with st.components.v1.html() so the CTCA
+    viewer actually displays instead of a blank screen.
+  • Suggested Health Operations grid now includes the CTCA button.
+  • _run_agent_command() centralises agent dispatch used by both the
+    sidebar buttons and the suggested-operations buttons.
 """
 
 # --- SQLITE HACK (required for cloud/environment compatibility) ---
@@ -17,17 +27,17 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import streamlit as st
+import streamlit.components.v1 as components
+
 from core.config import APP_TITLE, APP_ICON, UI_CSS, PAGES
 from core.session import init_session, add_log, get_logs, append_message
 from core.db import load_synthetic_data, sync_from_hf, backup_to_hf
 from core.gemini import get_active_model_label
 from agents import AGENT_REGISTRY
 
-# AUTH
 from auth.auth import init_db
 from auth.session import require_auth, render_user_sidebar
 
-# Initialize auth DB
 init_db()
 
 # ---------------------------------------------------------------------------
@@ -41,9 +51,6 @@ st.set_page_config(
 )
 st.markdown(UI_CSS, unsafe_allow_html=True)
 
-# ---------------------------------------------------------------------------
-# GLOBAL STICKY TITLE CSS
-# ---------------------------------------------------------------------------
 GLOBAL_STICKY_CSS = """
 <style>
 .hdw-sticky-title {
@@ -95,18 +102,9 @@ st.markdown(GLOBAL_STICKY_CSS, unsafe_allow_html=True)
 init_session()
 load_synthetic_data()
 
-# ---------------------------------------------------------------------------
-# RESTORE SESSION FROM COOKIE — must run every load, before any auth check
-# The cookie manager must be instantiated here so its hidden component
-# renders on every page load (including navigating between pages).
-# Without this, the component disappears and logout happens on refresh.
-# ---------------------------------------------------------------------------
 from auth.session import restore_session_from_cookie
 restore_session_from_cookie()
 
-# ---------------------------------------------------------------------------
-# AUTH GATE — show login if not authenticated
-# ---------------------------------------------------------------------------
 if "auth_initialized" not in st.session_state:
     st.session_state["auth_initialized"] = True
     st.session_state.pop("show_login", None)
@@ -117,16 +115,91 @@ if not st.session_state.get("auth_token") or st.session_state.get("show_login"):
     render_login()
     st.stop()
 
-# Validate session (handles expiry)
 require_auth()
 
 # ---------------------------------------------------------------------------
-# UTILITY FUNCTIONS
+# UTILITY: detect and render HTML vs markdown agent replies
+# ---------------------------------------------------------------------------
+_HTML_MARKERS = ("<div", "<canvas", "<script", "<style", "<img", "<button", "<input")
+
+def _is_html_reply(text: str) -> bool:
+    """Return True if the agent reply contains raw HTML that needs st.components."""
+    stripped = text.strip()
+    return any(marker in stripped for marker in _HTML_MARKERS)
+
+def _split_md_html(text: str):
+    """
+    Split a reply that has a markdown preamble followed by an HTML block.
+    Returns (markdown_part, html_part).  html_part may be empty string.
+    """
+    # Find the first HTML marker position
+    first_html = len(text)
+    for marker in _HTML_MARKERS:
+        pos = text.find(marker)
+        if pos != -1 and pos < first_html:
+            first_html = pos
+    if first_html == len(text):
+        return text, ""
+    return text[:first_html], text[first_html:]
+
+def render_assistant_message(text: str):
+    """
+    Render one assistant message correctly regardless of whether it is
+    plain markdown, a mixed markdown+HTML reply (e.g. NEXUS CTCA viewer),
+    or pure HTML.
+    """
+    if not _is_html_reply(text):
+        # Plain markdown — safe to use st.markdown as-is
+        st.markdown(text)
+        return
+
+    md_part, html_part = _split_md_html(text)
+
+    if md_part.strip():
+        st.markdown(md_part)
+
+    if html_part.strip():
+        # Wrap in a full HTML document so the viewer's <script> runs correctly
+        full_html = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body {{ margin:0; padding:0; background:transparent; }}
+</style>
+</head>
+<body>
+{html_part}
+</body>
+</html>"""
+        # height: enough for the CTCA viewer (title+banner+420px canvas+controls)
+        components.html(full_html, height=620, scrolling=False)
+
+# ---------------------------------------------------------------------------
+# UTILITY: centralised agent dispatch
 # ---------------------------------------------------------------------------
 def _get_agent_instance(entry):
     if isinstance(entry, type):
         return entry()
     return entry
+
+def _run_agent_command(agent_name: str, command: str):
+    """
+    Run an agent command, append messages, switch to Chat page, rerun.
+    Called from sidebar buttons AND suggested-operations buttons.
+    """
+    entry = AGENT_REGISTRY.get(agent_name)
+    if not entry:
+        st.error(f"Agent {agent_name!r} not found in registry.")
+        return
+    agent = _get_agent_instance(entry)
+    append_message("user", command)
+    with st.status("🤖 Thinking...", expanded=False) as status:
+        reply = agent.run(command)
+        status.update(label="🤖 Complete", state="complete")
+    append_message("assistant", reply)
+    st.session_state.page_selection = "💬 Agent Chat"
+    st.rerun()
 
 def display_system_logs():
     logs = get_logs()
@@ -180,7 +253,6 @@ def render_nav():
 # SIDEBAR UI
 # ---------------------------------------------------------------------------
 with st.sidebar:
-    # User info + logout button
     render_user_sidebar()
 
     st.markdown("### 🏥 HEALTH_OS_V2")
@@ -228,19 +300,24 @@ with st.sidebar:
     render_nav()
     st.divider()
 
+    # ── AGENTS expander: show EVERY trigger command, not just [0] ──────────
     with st.expander("🤖 AGENTS", expanded=True):
-        for name, entry in AGENT_REGISTRY.items():
+        for agent_name, entry in AGENT_REGISTRY.items():
             agent = _get_agent_instance(entry)
-            if getattr(agent, "TRIGGER_COMMANDS", []):
-                if st.button(f"{agent.icon} {name}", use_container_width=True, key=f"agent_{name}"):
-                    cmd = agent.TRIGGER_COMMANDS[0]
-                    append_message("user", cmd)
-                    with st.status("🤖 Thinking...", expanded=False) as status:
-                        reply = agent.run(cmd)
-                        status.update(label="🤖 Complete", state="complete")
-                    append_message("assistant", reply)
-                    st.session_state.page_selection = "💬 Agent Chat"
-                    st.rerun()
+            commands = getattr(agent, "TRIGGER_COMMANDS", [])
+            if not commands:
+                continue
+            # Show all trigger commands as individual buttons
+            for idx, cmd in enumerate(commands):
+                # Build a short label: use the command text, trimmed
+                short = cmd if len(cmd) <= 42 else cmd[:40] + "…"
+                btn_key = f"agent_{agent_name}_{idx}"
+                if st.button(
+                    f"{agent.icon} {short}",
+                    key=btn_key,
+                    use_container_width=True,
+                ):
+                    _run_agent_command(agent_name, cmd)
 
     st.divider()
     c1, c2 = st.columns(2)
@@ -258,7 +335,7 @@ with st.sidebar:
     display_system_logs()
 
 # ---------------------------------------------------------------------------
-# PAGE ROUTING LOGIC
+# PAGE ROUTING
 # ---------------------------------------------------------------------------
 current_page = st.session_state.get("page_selection", PAGES[0])
 
@@ -289,5 +366,3 @@ except ImportError as e:
     st.info("Please verify the file exists in the /pages directory.")
 except Exception as e:
     st.error(f"An unexpected error occurred: {e}")
-
-# --- End of app.py ---

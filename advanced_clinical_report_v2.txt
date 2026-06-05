@@ -1,0 +1,10 @@
+ 1. Coronary Lumen & Plaque:
+* pLAD stenosis: 17.3% geometric, eccentricity 0.78 (Grade 2)
+* mRCA stenosis: 12.1% geometric (Grade 1)
+2. Perivascular FAI:
+* pLAD FAI: -68.4 HU (threshold -70.1 HU) → ELEVATED — pericoronary inflammation signal detected (MACE risk modifier)
+3. Calcium & Risk:
+* Total Agatston score: 50 (Mild calcification, consider preventive therapy)
+4. Revised CAD-RADS:
+* Final classification: Grade 2 (Moderate stenosis)
+* Justification: The original CAD-RADS score was 1, but the elevated pLAD FAI value and the presence of mild calcification suggest a higher risk for cardiovascular events. Therefore, the final classification is upgraded to Grade 2 (Moderate stenosis). 

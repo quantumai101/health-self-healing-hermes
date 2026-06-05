@@ -1,0 +1,26 @@
+{
+  "patient_metadata": {
+    "name": "ZHANG, ZHIMING",
+    "dob": "1955-03-14",
+    "gender": "Male",
+    "scan_date": "2026-04-20",
+    "total_slices": 2849,
+    "volume_id": "16080000"
+  },
+  "monai_vessel_analysis": {
+    "left_main": { "stenosis": "0%", "plaque": "None", "density_hu": 320 },
+    "left_anterior_descending": { "stenosis": "15-20%", "plaque": "Minimal Calcified", "density_hu": 450, "segment": "pLAD" },
+    "left_circumflex": { "stenosis": "0%", "plaque": "None", "density_hu": 315 },
+    "right_coronary_artery": { "stenosis": "10-15%", "plaque": "Minimal Soft Lipid", "density_hu": 65, "segment": "mRCA" }
+  },
+  "medsam_ventricular_geometry": {
+    "left_ventricle_wall_thickness_mm": 11.2,
+    "right_ventricle_wall_thickness_mm": 4.1,
+    "status": "Normal thickness ranges relative to age-matched male cohort limits",
+    "mitral_valve_coaptation": "Mild trace regurgitation noted, no severe structural restriction"
+  },
+  "radimagenet_anomaly_density": {
+    "calcification_burden": "Minimal local calcium burden tracked",
+    "microvascular_status": "No gross high-contrast macro-obstruction visible within resolvable limits"
+  }
+}
