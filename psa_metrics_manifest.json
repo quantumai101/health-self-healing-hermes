@@ -1,0 +1,87 @@
+{
+  "_version": "v3.2",
+  "patient_metadata": {
+    "name": "Zhang Zhi Ming",
+    "dob": "14/03/1955",
+    "age_years": 71,
+    "gender": "Male"
+  },
+  "psa_history": [
+    {
+      "date": "28-Dec-22",
+      "total_psa": 3.3,
+      "free_psa": 1.2,
+      "free_pct": 36
+    },
+    {
+      "date": "03-Jan-24",
+      "total_psa": 4.2,
+      "free_psa": 1.3,
+      "free_pct": 31
+    },
+    {
+      "date": "17-Feb-26",
+      "total_psa": 5.4,
+      "free_psa": null,
+      "free_pct": null
+    },
+    {
+      "date": "01-May-26",
+      "total_psa": 8.4,
+      "free_psa": 1.9,
+      "free_pct": 23
+    }
+  ],
+  "prostate_imaging": [
+    {
+      "date": "22/10/2025",
+      "volume_ml": 99.9,
+      "pvr_ml": 79,
+      "note": "Calcification 4x6mm; cyst 9mm"
+    },
+    {
+      "date": "28/04/2026",
+      "volume_ml": 61.0,
+      "pvr_ml": 90,
+      "note": "Left ureteric jet ABSENT"
+    }
+  ],
+  "psad": {
+    "oct25": 0.054,
+    "may26": 0.138,
+    "threshold": 0.15
+  },
+  "labs": {
+    "crp_feb26": 0.4,
+    "crp_oct25": 1.7,
+    "iron_feb26": 10.7,
+    "iron_prev": 16.4,
+    "iron_saturation_pct": 21,
+    "ferritin": 70,
+    "ldl": 4.8,
+    "total_chol": 6.4,
+    "hdl": 1.4,
+    "triglycerides": 0.6,
+    "tc_hdl_ratio": 4.57,
+    "egfr": 74,
+    "creatinine": 90,
+    "globulin": 22,
+    "urate": 0.47,
+    "borderline_ogtt_date": "29/10/2025"
+  },
+  "ctca": {
+    "pLAD_FAI_HU": -68.4,
+    "threshold_HU": -70.1,
+    "status": "BORDERLINE ELEVATED",
+    "cad_rads": "CAD-RADS 2 + FAI modifier",
+    "agatston": 50,
+    "ef_pct": 58.2,
+    "lv_mass_index": 102.1
+  },
+  "pending": [
+    "MRI Prostate (requested 11/05/2026)",
+    "HbA1c",
+    "Urine microalbumin",
+    "MSU"
+  ]
+}
