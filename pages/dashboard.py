@@ -10,6 +10,7 @@ import pandas as pd
 import hashlib
 from typing import Optional, Callable
 from functools import wraps
+from datetime import datetime
 
 # --- Configuration & Constants ---
 logging.basicConfig(level=logging.INFO)
@@ -17,7 +18,6 @@ logger = logging.getLogger(__name__)
 MAX_RENDER_ROWS = 1000
 PII_COLUMNS = ["patient_id", "region"]
 
-# Strict allow-list for chat_prefill to prevent prompt injection/admin abuse
 ALLOWED_CHAT_COMMANDS = {
     "ingest_biometrics": "Ingest synthetic patient biometric data and run clinical quality checks",
     "run_simulation": "Run population health digital twin simulation on default cohort",
@@ -26,11 +26,54 @@ ALLOWED_CHAT_COMMANDS = {
     "generate_report": "Generate an executive weekly population health report"
 }
 
+# --- Audit & Security Decorators ---
+def audit_log_access(func: Callable) -> Callable:
+    """Decorator to log data access for HIPAA compliance."""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        user = st.session_state.get("user_id", "anonymous")
+        logger.info(f"AUDIT_LOG | User: {user} | Action: Data Access | Function: {func.__name__} | Timestamp: {datetime.utcnow().isoformat()}")
+        return func(*args, **kwargs)
+    return wrapper
+
+def require_auth(func: Callable) -> Callable:
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if not st.session_state.get("user_authorized", False):
+            st.error("Unauthorized access. Please log in.")
+            logger.warning("Unauthorized access attempt blocked.")
+            return None
+        return func(*args, **kwargs)
+    return wrapper
+
 # --- Service Layer ---
 class PatientDataService:
     """Handles data retrieval and processing logic, decoupled from UI."""
     
     @staticmethod
+    def _get_salt() -> str:
+        """Retrieves salt from environment, forcing crash if missing."""
+        salt = os.getenv("DATA_SALT")
+        if not salt:
+            logger.critical("DATA_SALT environment variable is not set. Application cannot proceed.")
+            raise EnvironmentError("Security configuration missing: DATA_SALT must be set.")
+        return salt
+
+    @staticmethod
+    def pseudonymize(df: pd.DataFrame) -> pd.DataFrame:
+        """Robust pseudonymization using HMAC-like hashing."""
+        masked_df = df.copy()
+        salt = PatientDataService._get_salt()
+        
+        for col in PII_COLUMNS:
+            if col in masked_df.columns:
+                masked_df[col] = masked_df[col].apply(
+                    lambda x: hashlib.sha256(f"{x}{salt}".encode()).hexdigest()[:12]
+                )
+        return masked_df
+
+    @staticmethod
+    @audit_log_access
     def get_processed_data() -> Optional[pd.DataFrame]:
         from core.db import get_all_patients
         from data.synthetic_patients import get_mock_df
@@ -44,7 +87,7 @@ class PatientDataService:
                 if is_prod:
                     logger.critical("Data source failure in production.")
                     return None
-                return get_mock_df()
+                df = get_mock_df()
             
             if len(df) > 50000:
                 logger.error(f"Data volume exceeded safety threshold: {len(df)} rows")
@@ -53,40 +96,12 @@ class PatientDataService:
             # Clinical classification logic (Note: Algorithmic outputs are advisory only)
             df["bp_stage"] = df["systolic_bp"].apply(classify_bp)
             df["glucose_stage"] = df["fasting_glucose_mmol"].apply(classify_glucose)
-            return df
+            
+            # Pseudonymize immediately upon retrieval to ensure PII is masked in memory
+            return PatientDataService.pseudonymize(df)
         except Exception as e:
             logger.error(f"Data processing error: {e}")
             return None
-
-    @staticmethod
-    def pseudonymize(df: pd.DataFrame) -> pd.DataFrame:
-        """Robust pseudonymization using HMAC-like hashing to prevent linkage attacks."""
-        masked_df = df.copy()
-        salt = os.getenv("DATA_SALT")
-        
-        if not salt:
-            if os.getenv("APP_ENV", "").lower() == "production":
-                logger.critical("DATA_SALT not set in production environment!")
-                raise EnvironmentError("Security configuration missing: DATA_SALT")
-            salt = "default_dev_salt"
-            
-        for col in PII_COLUMNS:
-            if col in masked_df.columns:
-                masked_df[col] = masked_df[col].apply(
-                    lambda x: hashlib.sha256(f"{x}{salt}".encode()).hexdigest()[:12]
-                )
-        return masked_df
-
-# --- Decorators & Helpers ---
-def require_auth(func: Callable) -> Callable:
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if not st.session_state.get("user_authorized", False):
-            st.error("Unauthorized access. Please log in.")
-            logger.warning("Unauthorized access attempt blocked.")
-            return None
-        return func(*args, **kwargs)
-    return wrapper
 
 def log_clinical_action(action_name: str):
     """Structured logging for clinical operations triggered via chat."""
@@ -161,7 +176,6 @@ def _render_inner() -> None:
     band_counts["Disease Risk Triggered"] = band_counts["BMI Band"].map(BMI_DISEASE_MAP)
     st.dataframe(band_counts, use_container_width=True, hide_index=True)
 
-    # Scatter Plot: Removed PII columns from hover_data to prevent leakage
     fig_bmi = px.scatter(
         df, x="bmi", y="risk_score",
         size="patients_affected", color="bmi_band",
@@ -173,9 +187,8 @@ def _render_inner() -> None:
     st.subheader("🚨 High-Risk Patients")
     critical_df = df[df["status"] == "CRITICAL"].sort_values("risk_score", ascending=False).head(MAX_RENDER_ROWS)
     
-    masked_critical = PatientDataService.pseudonymize(critical_df)
     st.dataframe(
-        masked_critical.rename(columns={
+        critical_df.rename(columns={
             "patient_id": "Patient ID",
             "age_years": "Age",
             "bmi": "BMI",
