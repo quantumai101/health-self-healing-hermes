@@ -64,3 +64,14 @@ def clear_messages() -> None:
         st.session_state["messages"] = []
     except Exception:
         pass
+
+def prune_messages(max_messages: int) -> None:
+    """Keep only the most recent max_messages in session history."""
+    if "messages" in st.session_state:
+        if len(st.session_state["messages"]) > max_messages:
+            st.session_state["messages"] = st.session_state["messages"][-max_messages:]
+
+def get_user_role() -> str:
+    """Return the current user's role, defaulting to 'user'."""
+    user = st.session_state.get("auth_user", {})
+    return user.get("role", "user") if user else "user"
