@@ -23,6 +23,7 @@ except ImportError:
 
 import os
 import time
+from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -39,6 +40,20 @@ from auth.auth import init_db
 from auth.session import require_auth, render_user_sidebar
 
 init_db()
+
+# ---------------------------------------------------------------------------
+# TEMPORARY RESET ENDPOINT — remove after use
+# Visit: https://aiq00479-health-self-healing-hermes.hf.space/?reset_db=QUANTUM_RESET_2026
+# ---------------------------------------------------------------------------
+_qp = st.query_params
+if _qp.get("reset_db") == "QUANTUM_RESET_2026":
+    _db = Path("auth/users.db")
+    if _db.exists():
+        _db.unlink()
+    init_db()
+    st.set_page_config(page_title="DB Reset", page_icon="🔄")
+    st.success("✅ DB reset complete! Now go to the app URL without ?reset_db and register fresh.")
+    st.stop()
 
 # ---------------------------------------------------------------------------
 # PAGE CONFIGURATION
@@ -132,7 +147,6 @@ def _split_md_html(text: str):
     Split a reply that has a markdown preamble followed by an HTML block.
     Returns (markdown_part, html_part).  html_part may be empty string.
     """
-    # Find the first HTML marker position
     first_html = len(text)
     for marker in _HTML_MARKERS:
         pos = text.find(marker)
@@ -149,7 +163,6 @@ def render_assistant_message(text: str):
     or pure HTML.
     """
     if not _is_html_reply(text):
-        # Plain markdown — safe to use st.markdown as-is
         st.markdown(text)
         return
 
@@ -159,7 +172,6 @@ def render_assistant_message(text: str):
         st.markdown(md_part)
 
     if html_part.strip():
-        # Wrap in a full HTML document so the viewer's <script> runs correctly
         full_html = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -172,7 +184,6 @@ def render_assistant_message(text: str):
 {html_part}
 </body>
 </html>"""
-        # height: enough for the CTCA viewer (title+banner+420px canvas+controls)
         components.html(full_html, height=620, scrolling=False)
 
 # ---------------------------------------------------------------------------
@@ -307,9 +318,7 @@ with st.sidebar:
             commands = getattr(agent, "TRIGGER_COMMANDS", [])
             if not commands:
                 continue
-            # Show all trigger commands as individual buttons
             for idx, cmd in enumerate(commands):
-                # Build a short label: use the command text, trimmed
                 short = cmd if len(cmd) <= 42 else cmd[:40] + "…"
                 btn_key = f"agent_{agent_name}_{idx}"
                 if st.button(
