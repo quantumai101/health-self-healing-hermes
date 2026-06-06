@@ -206,25 +206,10 @@ def _register_flow():
 
 def _step_register_details():
     with st.form("register_form"):
-        name  = st.text_input(
-            "Full name",
-            autocomplete="off"
-        )
-        email = st.text_input(
-            "Email address",
-            placeholder="you@example.com",
-            autocomplete="off"
-        )
-        pw1 = st.text_input(
-            "Password",
-            type="password",
-            autocomplete="new-password"
-        )
-        pw2 = st.text_input(
-            "Confirm password",
-            type="password",
-            autocomplete="new-password"
-        )
+        name = st.text_input("Full name")
+        email = st.text_input("Email address", placeholder="you@example.com")
+        pw1 = st.text_input("Password", type="password")
+        pw2 = st.text_input("Confirm password", type="password")
         submitted = st.form_submit_button("Create account →", use_container_width=True)
 
     if submitted:

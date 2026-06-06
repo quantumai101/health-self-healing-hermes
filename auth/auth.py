@@ -32,47 +32,6 @@ JWT_ALGO         = "HS256"
 JWT_EXPIRE_HOURS = 8    # absolute maximum — idle timeout (10 min) kicks in first
 APP_NAME         = "Health Hermes"
 
-# ── DB Persistence (survives HF Space rebuilds) ──────────────────────────────
-
-_HF_REPO_ID = "aiq00479/health-hermes-db"
-_HF_TOKEN   = os.environ.get("HF_TOKEN")
-
-def _download_db():
-    """Pull users.db from HF Dataset on container startup."""
-    if not _HF_TOKEN:
-        print("⚠️ HF_TOKEN not set — skipping DB restore")
-        return
-    try:
-        from huggingface_hub import hf_hub_download
-        import shutil
-        path = hf_hub_download(
-            repo_id=_HF_REPO_ID,
-            filename="users.db",
-            repo_type="dataset",
-            token=_HF_TOKEN
-        )
-        shutil.copy(path, DB_PATH)
-        print("✅ users.db restored from HF Dataset")
-    except Exception as e:
-        print(f"⚠️ No existing DB on HF (first run?): {e}")
-
-def _upload_db():
-    """Push users.db to HF Dataset after every write."""
-    if not _HF_TOKEN:
-        return
-    try:
-        from huggingface_hub import HfApi
-        HfApi().upload_file(
-            path_or_fileobj=str(DB_PATH),
-            path_in_repo="users.db",
-            repo_id=_HF_REPO_ID,
-            repo_type="dataset",
-            token=_HF_TOKEN
-        )
-        print("✅ users.db saved to HF Dataset")
-    except Exception as e:
-        print(f"❌ DB upload failed: {e}")
-
 # ── Database ─────────────────────────────────────────────────────────────────
 
 def get_db():
@@ -83,7 +42,6 @@ def get_db():
 
 def init_db():
     """Create tables if they don't exist. Call once at app startup."""
-    _download_db()  # ← CHANGE 1: restore DB from HF on every cold start
     with get_db() as conn:
         conn.executescript("""
         CREATE TABLE IF NOT EXISTS users (
@@ -132,9 +90,7 @@ def create_user(email: str, name: str, password: str) -> dict:
     (user_dir / "reports").mkdir(parents=True, exist_ok=True)
     (user_dir / "ehr").mkdir(parents=True, exist_ok=True)
 
-    user = get_user_by_id(user_id)
-    _upload_db()  # ← CHANGE 2: save after new user registered
-    return user
+    return get_user_by_id(user_id)
 
 
 def get_user_by_email(email: str):
@@ -204,7 +160,6 @@ def verify_totp_and_enable(user_id: str, code: str) -> bool:
     if totp.verify(code.strip(), valid_window=1):
         with get_db() as conn:
             conn.execute("UPDATE users SET mfa_enabled=1 WHERE id=?", (user_id,))
-        _upload_db()  # ← CHANGE 3: save after MFA enabled
         return True
     return False
 
@@ -229,7 +184,6 @@ def verify_totp_code(user_id: str, code: str) -> bool:
                 "UPDATE users SET backup_codes=? WHERE id=?",
                 (json.dumps(codes), user_id)
             )
-        _upload_db()  # backup code used — save updated codes
         return True
 
     return False
