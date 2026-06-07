@@ -282,7 +282,11 @@ try:
         from pages.compliance import render
         render()
     else:
-        st.warning("Selected page not found in navigation registry.")
+        elif "CTCA Panel View" in page:
+            from pages.ctca_panel_viewer import render
+            render()
+        else:
+            st.warning("Selected page not found in navigation registry.")
 
 except ImportError as e:
     st.error(f"Module Routing Error: {e}")
