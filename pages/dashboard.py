@@ -1,22 +1,32 @@
-"""
-pages/dashboard.py — Patient Health Risk Dashboard
-Refactored for HIPAA/GDPR compliance and architectural separation.
-"""
 import streamlit as st
 import logging
 import traceback
 import os
 import pandas as pd
+import hmac
 import hashlib
-from typing import Optional, Callable
+from typing import Optional, Callable, Dict
 from functools import wraps
 from datetime import datetime
+from pydantic import BaseModel, ValidationError, Field
 
 # --- Configuration & Constants ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 MAX_RENDER_ROWS = 1000
 PII_COLUMNS = ["patient_id", "region"]
+
+# Schema validation for incoming data to ensure structural integrity
+class PatientDataSchema(BaseModel):
+    patient_id: str
+    region: str
+    bmi: float
+    systolic_bp: int
+    fasting_glucose_mmol: float
+    status: str
+    risk_score: float
+    bmi_band: str
+    patients_affected: int
 
 ALLOWED_CHAT_COMMANDS = {
     "ingest_biometrics": "Ingest synthetic patient biometric data and run clinical quality checks",
@@ -51,24 +61,24 @@ class PatientDataService:
     """Handles data retrieval and processing logic, decoupled from UI."""
     
     @staticmethod
-    def _get_salt() -> str:
-        """Retrieves salt from environment, forcing crash if missing."""
-        salt = os.getenv("DATA_SALT")
-        if not salt:
-            logger.critical("DATA_SALT environment variable is not set. Application cannot proceed.")
-            raise EnvironmentError("Security configuration missing: DATA_SALT must be set.")
-        return salt
+    def _get_secret_key() -> bytes:
+        """Retrieves HMAC key from environment."""
+        key = os.getenv("DATA_HMAC_KEY")
+        if not key:
+            logger.critical("DATA_HMAC_KEY environment variable is not set.")
+            raise EnvironmentError("Security configuration missing.")
+        return key.encode()
 
     @staticmethod
     def pseudonymize(df: pd.DataFrame) -> pd.DataFrame:
-        """Robust pseudonymization using HMAC-like hashing."""
+        """Robust pseudonymization using HMAC-SHA256."""
         masked_df = df.copy()
-        salt = PatientDataService._get_salt()
+        key = PatientDataService._get_secret_key()
         
         for col in PII_COLUMNS:
             if col in masked_df.columns:
                 masked_df[col] = masked_df[col].apply(
-                    lambda x: hashlib.sha256(f"{x}{salt}".encode()).hexdigest()[:12]
+                    lambda x: hmac.new(key, str(x).encode(), hashlib.sha256).hexdigest()[:12]
                 )
         return masked_df
 
@@ -89,6 +99,14 @@ class PatientDataService:
                     return None
                 df = get_mock_df()
             
+            # Validate schema
+            try:
+                for _, row in df.iterrows():
+                    PatientDataSchema(**row.to_dict())
+            except ValidationError as ve:
+                logger.error(f"Data schema validation failed: {ve}")
+                return None
+            
             if len(df) > 50000:
                 logger.error(f"Data volume exceeded safety threshold: {len(df)} rows")
                 return None
@@ -97,7 +115,6 @@ class PatientDataService:
             df["bp_stage"] = df["systolic_bp"].apply(classify_bp)
             df["glucose_stage"] = df["fasting_glucose_mmol"].apply(classify_glucose)
             
-            # Pseudonymize immediately upon retrieval to ensure PII is masked in memory
             return PatientDataService.pseudonymize(df)
         except Exception as e:
             logger.error(f"Data processing error: {e}")
@@ -122,11 +139,12 @@ def _render_inner() -> None:
     from core.config import BMI_COLORS, BMI_DISEASE_MAP
     from core.chat_widget import render_chat_widget
 
-    st.warning(
-        "**DISCLAIMER:** This dashboard is for informational purposes only and does not "
-        "constitute medical advice, diagnosis, or treatment. Algorithmic risk scores must "
-        "be validated by clinical judgment."
-    )
+    st.warning("**DISCLAIMER:** This dashboard is for informational purposes only.")
+
+    # Refresh mechanism to bypass cache
+    if st.button("🔄 Refresh Clinical Data", key="dashboard__refresh_clinical_da_btn"):
+        st.cache_data.clear()
+        st.rerun()
 
     @st.cache_data(ttl=3600)
     def _load_cached_data():
@@ -151,21 +169,23 @@ def _render_inner() -> None:
     col1, col2 = st.columns(2)
     
     def trigger_action(key: str):
-        log_clinical_action(key)
-        st.session_state["chat_prefill"] = ALLOWED_CHAT_COMMANDS[key]
+        # Validate command against whitelist to prevent injection
+        if key in ALLOWED_CHAT_COMMANDS:
+            log_clinical_action(key)
+            st.session_state["chat_prefill"] = ALLOWED_CHAT_COMMANDS[key]
 
     with col1:
-        if st.button("Ingest Biometric Data", use_container_width=True):
+        if st.button("Ingest Biometric Data", use_container_width=True, key="dashboard_ingest_biometric_dat_btn"):
             trigger_action("ingest_biometrics")
-        if st.button("Run Digital Twin Simulation", use_container_width=True):
+        if st.button("Run Digital Twin Simulation", use_container_width=True, key="dashboard_run_digital_twin_sim_btn"):
             trigger_action("run_simulation")
-        if st.button("Predict Chronic Risk", use_container_width=True):
+        if st.button("Predict Chronic Risk", use_container_width=True, key="dashboard_predict_chronic_risk_btn"):
             trigger_action("predict_risk")
 
     with col2:
-        if st.button("Train Risk Model", use_container_width=True):
+        if st.button("Train Risk Model", use_container_width=True, key="dashboard_train_risk_model_btn"):
             trigger_action("train_model")
-        if st.button("Generate Weekly Report", use_container_width=True):
+        if st.button("Generate Weekly Report", use_container_width=True, key="dashboard_generate_weekly_repo_btn"):
             trigger_action("generate_report")
 
     st.divider()

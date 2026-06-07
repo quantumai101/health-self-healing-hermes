@@ -164,7 +164,7 @@ def _step_force_mfa_setup():
     data = st.session_state["totp_setup_data"]
     st.image(data["qr_png"], width=200)
 
-    if st.button("I've scanned it — Continue →", use_container_width=True):
+    if st.button("I've scanned it — Continue →", use_container_width=True, key="login_i_btn"):
         st.session_state["login_step"] = "force_mfa_verify"
         st.rerun()
 
@@ -249,7 +249,7 @@ def _step_mfa_setup():
 
     st.info("Once scanned, click Continue to verify your setup.")
 
-    if st.button("I've scanned it — Continue →", use_container_width=True):
+    if st.button("I've scanned it — Continue →", use_container_width=True, key="login_i_btn"):
         st.session_state["register_step"] = "mfa_verify"
         st.rerun()
 

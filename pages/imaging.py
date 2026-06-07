@@ -7,7 +7,9 @@ import tempfile
 import shutil
 import uuid
 import time
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Generator
+from contextlib import contextmanager
+from pathlib import Path
 import pydicom
 from pydicom.errors import InvalidDicomError
 from pydicom.dataset import Dataset
@@ -27,6 +29,7 @@ ALLOWED_MIME_TYPES = {
     'image/jpeg', 'image/png', 'image/webp', 'image/bmp', 
     'image/tiff', 'application/dicom'
 }
+ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tiff', '.dcm', '.dicom'}
 MAX_FILE_SIZE_MB = 50
 MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 SESSION_TIMEOUT_SECONDS = 3600
@@ -34,10 +37,26 @@ SESSION_TIMEOUT_SECONDS = 3600
 # ---------------------------------------------------------------------------
 # SESSION & STORAGE MANAGEMENT
 # ---------------------------------------------------------------------------
+
+@contextmanager
+def secure_temp_file(suffix: str = ".tmp") -> Generator[Path, None, None]:
+    """
+    Context manager for secure temporary file handling.
+    Ensures file deletion upon exit, preventing orphaned PHI data.
+    """
+    tmp_dir = get_session_dir()
+    tmp_path = Path(tmp_dir) / f"{uuid.uuid4()}{suffix}"
+    try:
+        yield tmp_path
+    finally:
+        if tmp_path.exists():
+            os.remove(tmp_path)
+            logger.info(f"Audit: Securely deleted temporary file: {tmp_path}")
+
 def get_session_dir():
     """
     Returns a secure, isolated directory for the current session.
-    Implements strict permissions (0o600) and tracks access time for cleanup.
+    Uses a unique directory per session to prevent race conditions.
     """
     if "user_temp_dir" not in st.session_state:
         tmp_dir = tempfile.mkdtemp(prefix='medisync_')
@@ -46,7 +65,6 @@ def get_session_dir():
         st.session_state.last_accessed = time.time()
         logger.info(f"Created secure session directory: {tmp_dir}")
     
-    # Check for stale session
     if time.time() - st.session_state.get("last_accessed", 0) > SESSION_TIMEOUT_SECONDS:
         cleanup_session_dir()
         return get_session_dir()
@@ -83,32 +101,15 @@ def scrub_phi(ds: Dataset) -> None:
         logger.error(f"Anonymization failed: {e}")
         raise
 
-def verify_burned_in_text(ds: Dataset) -> bool:
-    """
-    Clinical Safety: WARNING - This system does NOT perform automated OCR-based 
-    PHI detection. The pixel intensity check is a non-exhaustive heuristic.
-    Clinical environments must use validated, certified software for PHI detection.
-    """
-    try:
-        arr = ds.pixel_array
-        # Heuristic: Check for high-intensity regions in corners
-        if np.mean(arr[:50, :50]) > 250:
-            logger.warning("Potential burned-in PHI detected via intensity heuristic.")
-            return False
-        return True
-    except Exception as e:
-        logger.error(f"Burned-in text verification error: {e}")
-        return False
-
 def validate_and_scrub_dicom(file_path: str) -> bool:
-    """Performs deep inspection and PHI scrubbing of DICOM files."""
+    """
+    Performs deep inspection and PHI scrubbing.
+    NOTE: Automated burned-in text detection is not implemented. 
+    All DICOM uploads are flagged for manual clinical review.
+    """
     try:
         ds = pydicom.dcmread(file_path)
         scrub_phi(ds)
-        
-        if not verify_burned_in_text(ds):
-            return False
-            
         ds.save_as(file_path, write_like_original=False)
         logger.info(f"Audit: DICOM file processed and scrubbed: {file_path}")
         return True
@@ -117,10 +118,14 @@ def validate_and_scrub_dicom(file_path: str) -> bool:
         return False
 
 def process_file_stream(uploaded_file) -> Optional[Dict[str, Any]]:
-    """Processes file with strict permissions and audit logging."""
+    """Processes file with strict validation and audit logging."""
     try:
         if uploaded_file.size > MAX_FILE_SIZE_BYTES:
-            logger.warning(f"File {uploaded_file.name} exceeds size limit.")
+            return None
+
+        # Validate extension
+        ext = Path(uploaded_file.name).suffix.lower()
+        if ext not in ALLOWED_EXTENSIONS:
             return None
 
         sha256 = hashlib.sha256()
@@ -142,23 +147,24 @@ def process_file_stream(uploaded_file) -> Optional[Dict[str, Any]]:
         if mime not in ALLOWED_MIME_TYPES:
             return None
             
-        tmp_path = os.path.join(get_session_dir(), f"{uuid.uuid4()}.tmp")
-        with open(tmp_path, "wb") as f:
-            for chunk in iter(lambda: uploaded_file.read(8192), b""):
-                f.write(chunk)
-        
-        # Enforce strict file permissions
-        os.chmod(tmp_path, 0o600)
-        
-        if mime == 'application/dicom':
-            if not validate_and_scrub_dicom(tmp_path):
-                if os.path.exists(tmp_path): os.remove(tmp_path)
-                return None
+        with secure_temp_file(suffix=ext) as tmp_path:
+            with open(tmp_path, "wb") as f:
+                for chunk in iter(lambda: uploaded_file.read(8192), b""):
+                    f.write(chunk)
+            
+            os.chmod(tmp_path, 0o600)
+            
+            if mime == 'application/dicom':
+                if not validate_and_scrub_dicom(str(tmp_path)):
+                    return None
 
-        result = {"name": uploaded_file.name, "hash": file_hash, "path": tmp_path}
-        st.session_state.processed_files[file_hash] = result
-        logger.info(f"Audit: File processed successfully: {uploaded_file.name}")
-        return result
+            # Copy to a persistent location for the session duration
+            final_path = Path(get_session_dir()) / f"{uuid.uuid4()}{ext}"
+            shutil.copy2(tmp_path, final_path)
+            
+            result = {"name": uploaded_file.name, "hash": file_hash, "path": str(final_path), "manual_review": True}
+            st.session_state.processed_files[file_hash] = result
+            return result
     except Exception as e:
         logger.error(f"Processing failed: {str(e)}")
         return None
@@ -192,16 +198,16 @@ def main():
             else:
                 st.error(f"Invalid, unsupported, or oversized file: {f.name}")
 
-    if st.button("Clear All Scans"):
+    if st.button("Clear All Scans", key="imaging_clear_all_scans_btn"):
         cleanup_session_dir()
         st.rerun()
 
     if st.session_state.get("uploaded_files"):
         st.write("### Queued Scans")
         for file_meta in st.session_state.uploaded_files.values():
-            st.info(f"Processed: {file_meta['name']}")
+            st.info(f"Processed: {file_meta['name']} - ⚠️ MANUAL REVIEW REQUIRED")
 
-    st.sidebar.markdown("### ⚠️ Clinical Disclaimer\nFindings must be verified by a clinician. AI output is for research/support only. This system does not perform automated OCR-based PHI detection.")
+    st.sidebar.markdown("### ⚠️ Clinical Disclaimer\nFindings must be verified by a clinician. AI output is for research/support only. All DICOM files require manual review for burned-in PHI.")
 
 if __name__ == "__main__":
     try:

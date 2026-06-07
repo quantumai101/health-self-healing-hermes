@@ -640,7 +640,7 @@ Must be reviewed by a qualified clinician before any clinical decision.
         placeholder="Patient appears distressed…", key="sentiment_input",
     )
     if (
-        st.button("🔍 Analyse Sentiment & Entities", use_container_width=True)
+        st.button("🔍 Analyse Sentiment & Entities", use_container_width=True, key="ehr_summarizer__analyse_sentiment_e_btn")
         and sentiment_text
     ):
         from agents.prometheus import PrometheusAgent
