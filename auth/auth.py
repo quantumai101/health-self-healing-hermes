@@ -54,6 +54,7 @@ def init_db():
             totp_secret     TEXT,
             mfa_enabled     INTEGER DEFAULT 0,
             backup_codes    TEXT,
+            role            TEXT DEFAULT 'user',
             created_at      TEXT NOT NULL,
             last_login      TEXT
         );
@@ -66,6 +67,22 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users(id)
         );
         """)
+
+        # Add role column if upgrading existing DB (safe to run multiple times)
+        try:
+            conn.execute("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'")
+            conn.commit()
+        except Exception:
+            pass  # role column already exists
+
+        # AUTO-PROMOTE: ensure this account is always admin
+        conn.execute("""
+            UPDATE users SET role='admin'
+            WHERE email='aiq00479@gmail.com'
+            AND (role IS NULL OR role != 'admin')
+        """)
+        conn.commit()
+
     DATA_ROOT.mkdir(parents=True, exist_ok=True)
 
 # ── User management ───────────────────────────────────────────────────────────
