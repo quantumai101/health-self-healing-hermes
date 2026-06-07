@@ -266,6 +266,7 @@ PAGES = [
     "🩻 MediSync Imaging",
     "📰 Health News",
     "🛡️ Compliance",
+    "🩻 CTCA Panel View",
 ]
 
 # ---------------------------------------------------------------------------
