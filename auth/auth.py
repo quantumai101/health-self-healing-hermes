@@ -23,6 +23,61 @@ import qrcode
 import jwt
 from io import BytesIO
 
+# -- HF Dataset DB Sync (free-tier persistence) -------------------------------
+import threading
+try:
+    from huggingface_hub import hf_hub_download, upload_file, HfApi
+    _HF_SYNC_AVAILABLE = True
+except ImportError:
+    _HF_SYNC_AVAILABLE = False
+
+_HF_DATASET_REPO = "aiq00479/health-hermes-db"
+_HF_DB_FILENAME  = "users.db"
+_DB_SYNC_LOCK    = threading.Lock()
+
+def _hf_token() -> str:
+    """Read HF token from env (set as HF_TOKEN secret in Space settings)."""
+    return os.getenv("HF_TOKEN", "")
+
+def hf_db_pull():
+    """Download users.db from HF Dataset into local DB_PATH on startup."""
+    if not _HF_SYNC_AVAILABLE or not _hf_token():
+        return
+    try:
+        local = hf_hub_download(
+            repo_id=_HF_DATASET_REPO,
+            filename=_HF_DB_FILENAME,
+            repo_type="dataset",
+            token=_hf_token(),
+            local_dir=str(DB_PATH.parent),
+            local_dir_use_symlinks=False,
+        )
+        import shutil as _sh
+        if Path(local) != DB_PATH:
+            _sh.copy2(local, DB_PATH)
+    except Exception:
+        pass  # First run: no DB yet, init_db() will create it
+
+def hf_db_push():
+    """Upload current users.db to HF Dataset (called after write operations)."""
+    if not _HF_SYNC_AVAILABLE or not _hf_token() or not DB_PATH.exists():
+        return
+    def _push():
+        with _DB_SYNC_LOCK:
+            try:
+                api = HfApi(token=_hf_token())
+                api.upload_file(
+                    path_or_fileobj=str(DB_PATH),
+                    path_in_repo=_HF_DB_FILENAME,
+                    repo_id=_HF_DATASET_REPO,
+                    repo_type="dataset",
+                )
+            except Exception:
+                pass
+    threading.Thread(target=_push, daemon=True).start()
+# -----------------------------------------------------------------------------
+
+
 # ── Config ──────────────────────────────────────────────────────────────────
 
 # -- DB path -- HF Persistent Volume routing (patched by agent) --
@@ -44,6 +99,7 @@ def get_db():
 
 def init_db():
     """Create tables if they don't exist. Call once at app startup."""
+    hf_db_pull()  # Restore DB from HF Dataset if available
     with get_db() as conn:
         conn.executescript("""
         CREATE TABLE IF NOT EXISTS users (
@@ -109,6 +165,7 @@ def create_user(email: str, name: str, password: str) -> dict:
     (user_dir / "reports").mkdir(parents=True, exist_ok=True)
     (user_dir / "ehr").mkdir(parents=True, exist_ok=True)
 
+    hf_db_push()  # Persist new user to HF Dataset
     return get_user_by_id(user_id)
 
 
@@ -233,6 +290,7 @@ def create_session(user_id: str) -> str:
             (now.isoformat(), user_id)
         )
 
+    hf_db_push()  # Persist session to HF Dataset
     return token
 
 
