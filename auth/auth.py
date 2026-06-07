@@ -25,6 +25,56 @@ from io import BytesIO
 
 # -- HF Dataset DB Sync (free-tier persistence) -------------------------------
 import threading
+
+# -- HF Dataset DB Sync (free-tier persistence) --------------------------------
+import threading as _threading
+try:
+    from huggingface_hub import hf_hub_download, HfApi as _HfApi
+    _HF_SYNC_AVAILABLE = True
+except ImportError:
+    _HF_SYNC_AVAILABLE = False
+
+_HF_DATASET_REPO = "aiq00479/health-hermes-db"
+_HF_DB_FILENAME  = "users.db"
+_DB_SYNC_LOCK    = _threading.Lock()
+
+def _hf_token() -> str:
+    return os.getenv("HF_TOKEN", "")
+
+def hf_db_pull():
+    """Download users.db from HF Dataset on startup."""
+    if not _HF_SYNC_AVAILABLE or not _hf_token():
+        return
+    try:
+        local = hf_hub_download(
+            repo_id=_HF_DATASET_REPO, filename=_HF_DB_FILENAME,
+            repo_type="dataset", token=_hf_token(),
+            local_dir=str(DB_PATH.parent), local_dir_use_symlinks=False,
+        )
+        import shutil as _sh
+        if Path(local) != DB_PATH:
+            _sh.copy2(local, DB_PATH)
+    except Exception:
+        pass
+
+def hf_db_push():
+    """Upload users.db to HF Dataset (async, daemon thread)."""
+    if not _HF_SYNC_AVAILABLE or not _hf_token() or not DB_PATH.exists():
+        return
+    def _push():
+        with _DB_SYNC_LOCK:
+            try:
+                api = _HfApi(token=_hf_token())
+                api.upload_file(
+                    path_or_fileobj=str(DB_PATH),
+                    path_in_repo=_HF_DB_FILENAME,
+                    repo_id=_HF_DATASET_REPO, repo_type="dataset",
+                )
+            except Exception:
+                pass
+    _threading.Thread(target=_push, daemon=True).start()
+# hf_db_sync end ---------------------------------------------------------------
+
 try:
     from huggingface_hub import hf_hub_download, upload_file, HfApi
     _HF_SYNC_AVAILABLE = True
@@ -99,6 +149,7 @@ def get_db():
 
 def init_db():
     """Create tables if they don't exist. Call once at app startup."""
+    hf_db_pull()
     hf_db_pull()  # Restore DB from HF Dataset if available
     with get_db() as conn:
         conn.executescript("""
@@ -166,6 +217,7 @@ def create_user(email: str, name: str, password: str) -> dict:
     (user_dir / "ehr").mkdir(parents=True, exist_ok=True)
 
     hf_db_push()  # Persist new user to HF Dataset
+    hf_db_push()
     return get_user_by_id(user_id)
 
 
@@ -291,6 +343,7 @@ def create_session(user_id: str) -> str:
         )
 
     hf_db_push()  # Persist session to HF Dataset
+    hf_db_push()
     return token
 
 

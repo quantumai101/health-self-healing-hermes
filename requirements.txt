@@ -17,3 +17,4 @@ PyJWT>=2.8.0
 qrcode[pil]>=7.4.2
 presidio-analyzer
 presidio-anonymizer
+pydicom>=2.4.0
