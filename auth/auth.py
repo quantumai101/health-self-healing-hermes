@@ -25,7 +25,9 @@ from io import BytesIO
 
 # ── Config ──────────────────────────────────────────────────────────────────
 
-DB_PATH          = Path(__file__).parent / "users.db"
+# -- DB path -- HF Persistent Volume routing (patched by agent) --
+_DATA_DIR = Path("/data")
+DB_PATH   = (_DATA_DIR / "users.db") if _DATA_DIR.exists() else (Path(__file__).parent / "users.db")
 DATA_ROOT        = Path(__file__).parent.parent / "data" / "users"
 JWT_SECRET       = os.getenv("HERMES_JWT_SECRET", secrets.token_hex(32))
 JWT_ALGO         = "HS256"
@@ -157,7 +159,7 @@ def verify_totp_and_enable(user_id: str, code: str) -> bool:
     if not user or not user["totp_secret"]:
         return False
     totp = pyotp.TOTP(user["totp_secret"])
-    if totp.verify(code.strip(), valid_window=1):
+    if totp.verify(code.strip(), valid_window=2):
         with get_db() as conn:
             conn.execute("UPDATE users SET mfa_enabled=1 WHERE id=?", (user_id,))
         return True
@@ -171,7 +173,7 @@ def verify_totp_code(user_id: str, code: str) -> bool:
         return False
 
     totp = pyotp.TOTP(user["totp_secret"])
-    if totp.verify(code.strip(), valid_window=1):
+    if totp.verify(code.strip(), valid_window=2):
         return True
 
     # Check backup codes
