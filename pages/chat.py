@@ -26,50 +26,37 @@ except ImportError:
 from core.session import get_messages, append_message, add_log, prune_messages, get_user_role
 from agents import AGENT_REGISTRY
 
-# ── Clinical Disclaimer Modal (disclaimer_modal_v2 — TroubleshootAgent) ──────
+# ── Clinical Disclaimer (disclaimer_modal_v3 — TroubleshootAgent) ─────────────
 if "disclaimer_accepted" not in st.session_state:
     st.session_state["disclaimer_accepted"] = False
 
 if not st.session_state["disclaimer_accepted"]:
-    # Use CSS to create a centred overlay without st.dialog (Streamlit ≥1.35)
-    st.markdown("""
-    <style>
-    .disclaimer-overlay {
-        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-        background: rgba(0,0,0,0.75); z-index: 9999;
-        display: flex; align-items: center; justify-content: center;
-    }
-    .disclaimer-box {
-        background: #1a1a2e; border: 2px solid #f59e0b;
-        border-radius: 16px; padding: 2.5rem 3rem; max-width: 600px;
-        text-align: center; color: #fff;
-    }
-    .disclaimer-box h2 { color: #f59e0b; margin-bottom: 1rem; font-size: 1.4rem; }
-    .disclaimer-box p  { font-size: 1rem; line-height: 1.7; color: #d1d5db; }
-    </style>
-    <div class="disclaimer-overlay">
-      <div class="disclaimer-box">
-        <h2>⚕ WARNING — CLINICAL DISCLAIMER</h2>
-        <p>AI outputs are for <strong>decision support only</strong> and are
-        <strong>not diagnostic</strong>. All findings must be verified with
-        clinical data by a qualified healthcare professional before any
-        clinical action is taken.</p>
-      </div>
-    </div>
-    """, unsafe_allow_html=True)
-    st.markdown("<br>" * 12, unsafe_allow_html=True)
-    col_l, col_c, col_r = st.columns([1, 3, 1])
-    with col_c:
+    _sp1, _mid, _sp2 = st.columns([1, 4, 1])
+    with _mid:
+        st.markdown("""
+<div style="margin-top:4rem;background:#1a1a2e;border:2px solid #f59e0b;
+border-radius:16px;padding:2.5rem 3rem;text-align:center;color:#fff">
+<h2 style="color:#f59e0b;margin-bottom:1rem;font-size:1.3rem;letter-spacing:.05em">
+⚕ WARNING — CLINICAL DISCLAIMER</h2>
+<p style="font-size:.95rem;line-height:1.7;color:#d1d5db">
+AI outputs are for <strong>decision support only</strong> and are
+<strong>not diagnostic</strong>. All findings must be verified with
+clinical data by a qualified healthcare professional before any
+clinical action is taken.</p>
+</div>""", unsafe_allow_html=True)
+        st.markdown("&nbsp;", unsafe_allow_html=True)
         if st.button(
             "✓  I acknowledge and accept the clinical disclaimer",
             use_container_width=True,
             type="primary",
-            key="clinical_disclaimer_modal_v2_btn",
+            key="clinical_disclaimer_v3_btn",
         ):
             st.session_state["disclaimer_accepted"] = True
             st.rerun()
-    st.stop()
-# ── End Clinical Disclaimer Modal ─────────────────────────────────────────────
+    st.stop()   # MUST be outside `with _mid` so Streamlit renders the button first
+# ── End disclaimer_modal_v3 ───────────────────────────────────────────────────
+
+
 
 
 logger = logging.getLogger(__name__)

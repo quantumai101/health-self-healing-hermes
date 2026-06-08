@@ -51,12 +51,16 @@ def _step_credentials():
             "Email address",
             placeholder="you@example.com",
             autocomplete="off"
-        )
+        ,
+    key="login_email_address_k"
+)
         password = st.text_input(
             "Password",
             type="password",
             autocomplete="new-password"
-        )
+        ,
+    key="login_password_k"
+)
         submitted = st.form_submit_button("Continue →", use_container_width=True)
 
     if submitted:
@@ -100,7 +104,9 @@ def _step_mfa():
             placeholder="123456",
             help="Enter the code from your authenticator app, or a backup code.",
             autocomplete="off"
-        )
+        ,
+    key="login_6_digit_authentication_k"
+)
         col1, col2 = st.columns(2)
         submitted = col1.form_submit_button("Verify →", use_container_width=True)
         back = col2.form_submit_button("← Back", use_container_width=True)
@@ -181,7 +187,9 @@ def _step_force_mfa_verify():
             max_chars=6,
             placeholder="123456",
             autocomplete="off"
-        )
+        ,
+    key="login_code_from_app_k"
+)
         submitted = st.form_submit_button("Enable MFA & Sign In →", use_container_width=True)
 
     if submitted:
@@ -206,10 +214,18 @@ def _register_flow():
 
 def _step_register_details():
     with st.form("register_form"):
-        name = st.text_input("Full name")
-        email = st.text_input("Email address", placeholder="you@example.com")
-        pw1 = st.text_input("Password", type="password")
-        pw2 = st.text_input("Confirm password", type="password")
+        name = st.text_input("Full name",
+    key="login_full_name_k"
+)
+        email = st.text_input("Email address", placeholder="you@example.com",
+    key="login_email_address_k1"
+)
+        pw1 = st.text_input("Password", type="password",
+    key="login_password_k1"
+)
+        pw2 = st.text_input("Confirm password", type="password",
+    key="login_confirm_password_k"
+)
         submitted = st.form_submit_button("Create account →", use_container_width=True)
 
     if submitted:
@@ -249,7 +265,7 @@ def _step_mfa_setup():
 
     st.info("Once scanned, click Continue to verify your setup.")
 
-    if st.button("I've scanned it — Continue →", use_container_width=True, key="login_i_btn"):
+    if st.button("I've scanned it — Continue →", use_container_width=True, key="login_i_btn_2"):
         st.session_state["register_step"] = "mfa_verify"
         st.rerun()
 
@@ -265,7 +281,9 @@ def _step_mfa_verify():
             max_chars=6,
             placeholder="123456",
             autocomplete="off"
-        )
+        ,
+    key="login_code_from_app_k1"
+)
         submitted = st.form_submit_button("Enable MFA & Sign In →", use_container_width=True)
 
     if submitted:
