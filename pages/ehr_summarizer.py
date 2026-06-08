@@ -579,7 +579,9 @@ Must be reviewed by a qualified clinician before any clinical decision.
             if st.button(
                 "🧠 Generate NOVA Clinical Summary",
                 use_container_width=True, type="primary",
-            ) or regen:
+            ,
+            key="ehr_summarizer__generate_nova_clinical__k"
+        ) or regen:
                 with st.spinner("NOVA analysing…"):
                     add_log(f"EHR_SUMMARIZE:{detail_level}/{focus_area}")
                     enhanced = (

@@ -208,7 +208,9 @@ with st.sidebar:
         st.markdown(label)
 
     if not st.session_state.api_active:
-        if st.button("🚀 ACTIVATE API", use_container_width=True):
+        if st.button("🚀 ACTIVATE API", use_container_width=True,
+            key="app__activate_api_k"
+        ):
             st.session_state.api_active = True
             st.session_state.api_mode = "simulation"
             add_log("SIMULATION_MODE_ACTIVE")
@@ -218,7 +220,9 @@ with st.sidebar:
             st.warning("⚡ API Active — Simulation mode")
         else:
             st.success("✅ API Online — Live mode")
-        if st.button("🔴 DEACTIVATE", use_container_width=True):
+        if st.button("🔴 DEACTIVATE", use_container_width=True,
+            key="app__deactivate_k"
+        ):
             st.session_state.api_active = False
             st.session_state.api_mode = None
             add_log("API_DEACTIVATED")
@@ -245,12 +249,16 @@ with st.sidebar:
     st.divider()
     c1, c2 = st.columns(2)
     with c1:
-        if st.button("📥 SYNC", use_container_width=True):
+        if st.button("📥 SYNC", use_container_width=True,
+            key="app__sync_k"
+        ):
             with st.spinner("Syncing..."):
                 sync_from_hf()
                 st.rerun()
     with c2:
-        if st.button("📤 BACKUP", use_container_width=True):
+        if st.button("📤 BACKUP", use_container_width=True,
+            key="app__backup_k"
+        ):
             with st.spinner("Backing up..."):
                 backup_to_hf()
                 st.rerun()
