@@ -1,0 +1,343 @@
+2026-06-08 08:08:56,756 [INFO] ============================================================
+2026-06-08 08:08:56,758 [INFO] HEALTH HERMES // TROUBLESHOOT AGENT v1.0 � starting
+2026-06-08 08:08:56,759 [INFO] Project root : C:\Users\Zhi\Desktop\health-self-healing-hermes
+2026-06-08 08:08:56,760 [INFO] Dry run      : False
+2026-06-08 08:08:56,762 [INFO] ============================================================
+2026-06-08 08:08:56,763 [INFO] Loaded 9 built-in fixers
+
+2026-06-08 08:08:56,763 [INFO] [1/9] Checking: Ensure baseline Python deps in requirements.txt
+2026-06-08 08:08:56,937 [INFO]   [requirements] added: ['pydicom>=2.4.0']
+2026-06-08 08:08:56,952 [INFO] [2/9] Checking: Remove temporary /reset endpoint from app.py
+2026-06-08 08:08:56,966 [INFO] [3/9] Checking: Add role column + admin auto-promote to auth.py
+2026-06-08 08:08:56,980 [INFO] [4/9] Checking: Add valid_window=2 tolerance to TOTP verify calls
+2026-06-08 08:08:56,995 [INFO] [5/9] Checking: Add HF Dataset DB sync to auth.py for free-tier persistence
+2026-06-08 08:08:57,056 [INFO] [6/9] Checking: Fix duplicate button/toggle keys in ctca_panel_viewer.py
+2026-06-08 08:08:57,065 [INFO] [7/9] Checking: Register CTCA Panel View in app.py page map
+2026-06-08 08:08:57,071 [INFO] [8/9] Checking: Replace inline disclaimer banner with centred st.dialog modal
+2026-06-08 08:08:57,088 [INFO] [9/9] Checking: Add NEXUS_SINGLE_USER_MODE fallback env var
+2026-06-08 08:08:57,100 [INFO] 
+Committing 2 files�
+2026-06-08 08:09:00,522 [INFO] Pushing to remotes�
+2026-06-08 08:09:25,410 [INFO] Waiting 90s for HF Space rebuild�
+2026-06-08 08:09:25,411 [INFO]   90s remaining�
+2026-06-08 08:09:35,413 [INFO]   80s remaining�
+2026-06-08 08:09:45,414 [INFO]   70s remaining�
+2026-06-08 08:09:55,416 [INFO]   60s remaining�
+2026-06-08 08:10:05,417 [INFO]   50s remaining�
+2026-06-08 08:10:15,419 [INFO]   40s remaining�
+2026-06-08 08:10:25,420 [INFO]   30s remaining�
+2026-06-08 08:10:35,422 [INFO]   20s remaining�
+2026-06-08 08:10:45,425 [INFO]   10s remaining�
+2026-06-08 08:10:55,426 [INFO] 
+============================================================
+2026-06-08 08:10:55,427 [INFO] TROUBLESHOOT AGENT � SUMMARY
+2026-06-08 08:10:55,428 [INFO]   Applied : ['requirements_baseline', 'db_hf_persistence']
+2026-06-08 08:10:55,429 [INFO]   Skipped : ['remove_temp_reset', 'auth_role_column', 'totp_valid_window', 'ctca_widget_keys', 'page_registry_ctca', 'disclaimer_modal_center', 'nexus_single_user_mode']
+2026-06-08 08:10:55,430 [INFO]   Failed  : ['(none)']
+2026-06-08 08:10:55,445 [INFO] ============================================================
+2026-06-08 08:10:57,412 [INFO] ============================================================
+2026-06-08 08:10:57,414 [INFO] HEALTH HERMES // TROUBLESHOOT AGENT v1.0 � starting
+2026-06-08 08:10:57,415 [INFO] Project root : C:\Users\Zhi\Desktop\health-self-healing-hermes
+2026-06-08 08:10:57,416 [INFO] Dry run      : True
+2026-06-08 08:10:57,417 [INFO] ============================================================
+2026-06-08 08:10:57,419 [INFO] Loaded 9 built-in fixers
+
+2026-06-08 08:10:57,419 [INFO] [1/9] Checking: Ensure baseline Python deps in requirements.txt
+2026-06-08 08:10:57,471 [INFO] [2/9] Checking: Remove temporary /reset endpoint from app.py
+2026-06-08 08:10:57,478 [INFO] [3/9] Checking: Add role column + admin auto-promote to auth.py
+2026-06-08 08:10:57,485 [INFO] [4/9] Checking: Add valid_window=2 tolerance to TOTP verify calls
+2026-06-08 08:10:57,494 [INFO] [5/9] Checking: Add HF Dataset DB sync to auth.py for free-tier persistence
+2026-06-08 08:10:57,501 [INFO] [6/9] Checking: Fix duplicate button/toggle keys in ctca_panel_viewer.py
+2026-06-08 08:10:57,510 [INFO] [7/9] Checking: Register CTCA Panel View in app.py page map
+2026-06-08 08:10:57,517 [INFO] [8/9] Checking: Replace inline disclaimer banner with centred st.dialog modal
+2026-06-08 08:10:57,529 [INFO] [9/9] Checking: Add NEXUS_SINGLE_USER_MODE fallback env var
+2026-06-08 08:10:57,543 [INFO] 
+============================================================
+2026-06-08 08:10:57,544 [INFO] TROUBLESHOOT AGENT � SUMMARY
+2026-06-08 08:10:57,545 [INFO]   Applied : ['(none)']
+2026-06-08 08:10:57,546 [INFO]   Skipped : ['requirements_baseline', 'remove_temp_reset', 'auth_role_column', 'totp_valid_window', 'db_hf_persistence', 'ctca_widget_keys', 'page_registry_ctca', 'disclaimer_modal_center', 'nexus_single_user_mode']
+2026-06-08 08:10:57,547 [INFO]   Failed  : ['(none)']
+2026-06-08 08:10:57,561 [INFO] ============================================================
+2026-06-08 08:54:38,800 [INFO] ================================================================
+2026-06-08 08:54:38,801 [INFO] HEALTH HERMES // TROUBLESHOOT AGENT v2.0
+2026-06-08 08:54:38,802 [INFO]   Project root : C:\Users\Zhi\Desktop\health-self-healing-hermes
+2026-06-08 08:54:38,803 [INFO]   Dry run      : False
+2026-06-08 08:54:38,803 [INFO]   Audit log    : C:\Users\Zhi\Desktop\health-self-healing-hermes\troubleshoot_audit.log
+2026-06-08 08:54:38,804 [INFO]   Backups      : C:\Users\Zhi\Desktop\health-self-healing-hermes\.agent_backups/
+2026-06-08 08:54:38,804 [INFO] ================================================================
+2026-06-08 08:54:38,805 [INFO] === RUN START dry_run=False ===
+2026-06-08 08:54:38,806 [INFO] Loaded 9 fixers
+
+2026-06-08 08:54:38,807 [INFO] [1/9] requirements_baseline
+2026-06-08 08:54:38,807 [INFO]          Ensure baseline Python deps in requirements.txt
+2026-06-08 08:54:38,854 [INFO] [2/9] remove_temp_reset
+2026-06-08 08:54:38,854 [INFO]          Remove temporary /reset endpoint
+2026-06-08 08:55:06,257 [INFO] WRITE C:\Users\Zhi\Desktop\health-self-healing-hermes\troubleshoot_agent.py
+2026-06-08 08:55:06,376 [INFO] [3/9] auth_role_column
+2026-06-08 08:55:06,376 [INFO]          Add role column + admin auto-promote to auth.py
+2026-06-08 08:55:06,382 [INFO] [4/9] totp_valid_window
+2026-06-08 08:55:06,382 [INFO]          Add valid_window=2 to TOTP verify calls
+2026-06-08 08:55:06,391 [INFO] [5/9] db_hf_persistence
+2026-06-08 08:55:06,391 [INFO]          Add HF Dataset DB sync to auth.py
+2026-06-08 08:55:06,400 [INFO] [6/9] duplicate_widget_keys
+2026-06-08 08:55:06,400 [INFO]          Fix duplicate st.button/toggle keys across all pages
+2026-06-08 08:55:32,811 [INFO] WRITE C:\Users\Zhi\Desktop\health-self-healing-hermes\pages\chat.py
+2026-06-08 08:55:32,812 [INFO]   [widget_keys] fixed keys in chat.py
+2026-06-08 08:55:32,843 [INFO] WRITE C:\Users\Zhi\Desktop\health-self-healing-hermes\pages\dashboard.py
+2026-06-08 08:55:32,844 [INFO]   [widget_keys] fixed keys in dashboard.py
+2026-06-08 08:55:32,872 [INFO] WRITE C:\Users\Zhi\Desktop\health-self-healing-hermes\pages\ehr_summarizer.py
+2026-06-08 08:55:32,873 [INFO]   [widget_keys] fixed keys in ehr_summarizer.py
+2026-06-08 08:55:32,896 [INFO] WRITE C:\Users\Zhi\Desktop\health-self-healing-hermes\pages\imaging.py
+2026-06-08 08:55:32,897 [INFO]   [widget_keys] fixed keys in imaging.py
+2026-06-08 08:55:32,917 [INFO] WRITE C:\Users\Zhi\Desktop\health-self-healing-hermes\pages\login.py
+2026-06-08 08:55:32,921 [INFO]   [widget_keys] fixed keys in login.py
+2026-06-08 08:55:32,929 [INFO] [7/9] page_registry_ctca
+2026-06-08 08:55:32,930 [INFO]          Register CTCA Panel View in app.py page map
+2026-06-08 08:55:32,938 [INFO] [8/9] disclaimer_modal_center
+2026-06-08 08:55:32,938 [INFO]          Replace inline disclaimer with centred overlay modal (scans all .py files)
+2026-06-08 08:56:25,554 [INFO]   [disclaimer] already fixed in troubleshoot_agent.py � skip
+2026-06-08 08:56:25,556 [INFO]   [disclaimer] found in push_chat.py � applying modal fix
+2026-06-08 08:56:25,590 [INFO] WRITE C:\Users\Zhi\Desktop\health-self-healing-hermes\push_chat.py
+2026-06-08 08:56:25,596 [INFO]   [disclaimer] found in chat.py � applying modal fix
+2026-06-08 08:56:25,618 [INFO] WRITE C:\Users\Zhi\Desktop\health-self-healing-hermes\pages\chat.py
+2026-06-08 08:56:25,627 [INFO] [9/9] nexus_single_user
+2026-06-08 08:56:25,628 [INFO]          Add NEXUS_SINGLE_USER_MODE env fallback
+2026-06-08 08:56:34,420 [INFO] 
+Staging 2 files�
+2026-06-08 08:56:34,421 [INFO] GIT git add C:\Users\Zhi\Desktop\health-self-healing-hermes\app.py C:\Users\Zhi\Desktop\health-self-healing-hermes\pages
+2026-06-08 08:56:34,658 [INFO] GIT git commit -m [TroubleshootAgent v2] auto-fix: remove_temp_reset, duplicate_widget_keys, disclaimer_modal_center
+2026-06-08 08:56:37,337 [INFO] Pushing�
+2026-06-08 08:56:37,338 [INFO] GIT git push huggingface main
+2026-06-08 08:56:47,866 [INFO] GIT git push origin main
+2026-06-08 08:57:01,065 [INFO] 
+Waiting 90s for HF Space rebuild�
+2026-06-08 08:57:01,066 [INFO]   90s�
+2026-06-08 08:57:16,066 [INFO]   75s�
+2026-06-08 08:57:31,068 [INFO]   60s�
+2026-06-08 08:57:46,070 [INFO]   45s�
+2026-06-08 08:58:01,072 [INFO]   30s�
+2026-06-08 08:58:16,073 [INFO]   15s�
+2026-06-08 08:58:31,074 [INFO] 
+================================================================
+2026-06-08 08:58:31,076 [INFO] SUMMARY
+2026-06-08 08:58:31,077 [INFO]   Applied             : ['remove_temp_reset', 'duplicate_widget_keys', 'disclaimer_modal_center']
+2026-06-08 08:58:31,080 [INFO]   Skipped (OK)        : ['requirements_baseline', 'auth_role_column', 'totp_valid_window', 'db_hf_persistence', 'page_registry_ctca', 'nexus_single_user']
+2026-06-08 08:58:31,082 [INFO]   Failed              : ['(none)']
+2026-06-08 08:58:31,083 [INFO]   Security violations : 0 (see troubleshoot_audit.log)
+2026-06-08 08:58:31,104 [INFO] ================================================================
+2026-06-08 08:58:31,105 [INFO] === RUN END applied=['remove_temp_reset', 'duplicate_widget_keys', 'disclaimer_modal_center'] failed=[] violations=0 ===
+2026-06-08 14:48:52,269 [INFO] ================================================================
+2026-06-08 14:48:52,270 [INFO] HEALTH HERMES // TROUBLESHOOT AGENT v2.0
+2026-06-08 14:48:52,270 [INFO]   Project root : C:\Users\Zhi\Desktop\health-self-healing-hermes
+2026-06-08 14:48:52,271 [INFO]   Dry run      : False
+2026-06-08 14:48:52,271 [INFO]   Audit log    : C:\Users\Zhi\Desktop\health-self-healing-hermes\troubleshoot_audit.log
+2026-06-08 14:48:52,272 [INFO]   Backups      : C:\Users\Zhi\Desktop\health-self-healing-hermes\.agent_backups/
+2026-06-08 14:48:52,273 [INFO] ================================================================
+2026-06-08 14:48:52,273 [INFO] === RUN START dry_run=False ===
+2026-06-08 14:48:52,275 [INFO] Loaded 9 fixers
+
+2026-06-08 14:48:52,275 [INFO] [1/9] requirements_baseline
+2026-06-08 14:48:52,276 [INFO]          Ensure baseline Python deps in requirements.txt
+2026-06-08 14:48:52,313 [INFO]   ✓ OK — skip
+
+2026-06-08 14:48:52,314 [INFO] [2/9] remove_temp_reset
+2026-06-08 14:48:52,314 [INFO]          Remove temporary /reset endpoint
+2026-06-08 14:49:16,325 [INFO]   ⚙ fix needed…
+2026-06-08 14:49:30,490 [INFO] BACKUP C:\Users\Zhi\Desktop\health-self-healing-hermes\troubleshoot_agent.py → C:\Users\Zhi\Desktop\health-self-healing-hermes\.agent_backups\troubleshoot_agent.py.bak_20260608_144930
+2026-06-08 14:49:30,498 [INFO] WRITE C:\Users\Zhi\Desktop\health-self-healing-hermes\troubleshoot_agent.py
+2026-06-08 14:49:30,500 [INFO]   ✓ applied
+
+2026-06-08 14:49:30,502 [INFO] [3/9] auth_role_column
+2026-06-08 14:49:30,502 [INFO]          Add role column + admin auto-promote to auth.py
+2026-06-08 14:49:30,506 [INFO]   ✓ OK — skip
+
+2026-06-08 14:49:30,507 [INFO] [4/9] totp_valid_window
+2026-06-08 14:49:30,508 [INFO]          Add valid_window=2 to TOTP verify calls
+2026-06-08 14:49:30,511 [INFO]   ✓ OK — skip
+
+2026-06-08 14:49:30,512 [INFO] [5/9] db_hf_persistence
+2026-06-08 14:49:30,513 [INFO]          Add HF Dataset DB sync to auth.py
+2026-06-08 14:49:30,516 [INFO]   ✓ OK — skip
+
+2026-06-08 14:49:30,517 [INFO] [6/9] duplicate_widget_keys
+2026-06-08 14:49:30,518 [INFO]          Fix duplicate st.button/toggle keys across all pages
+2026-06-08 14:49:30,531 [INFO]   [widget_keys] keyless buttons in chat.py
+2026-06-08 14:49:30,532 [INFO]   ⚙ fix needed…
+2026-06-08 14:49:30,570 [INFO] BACKUP C:\Users\Zhi\Desktop\health-self-healing-hermes\pages\ctca_panel_viewer.py → C:\Users\Zhi\Desktop\health-self-healing-hermes\.agent_backups\ctca_panel_viewer.py.bak_20260608_144930
+2026-06-08 14:49:30,576 [INFO] WRITE C:\Users\Zhi\Desktop\health-self-healing-hermes\pages\ctca_panel_viewer.py
+2026-06-08 14:49:30,577 [INFO]   [widget_keys] fixed keys in ctca_panel_viewer.py
+2026-06-08 14:49:30,617 [INFO] BACKUP C:\Users\Zhi\Desktop\health-self-healing-hermes\pages\ehr_summarizer.py → C:\Users\Zhi\Desktop\health-self-healing-hermes\.agent_backups\ehr_summarizer.py.bak_20260608_144930
+2026-06-08 14:49:30,621 [INFO] WRITE C:\Users\Zhi\Desktop\health-self-healing-hermes\pages\ehr_summarizer.py
+2026-06-08 14:49:30,623 [INFO]   [widget_keys] fixed keys in ehr_summarizer.py
+2026-06-08 14:49:30,662 [INFO] BACKUP C:\Users\Zhi\Desktop\health-self-healing-hermes\app.py → C:\Users\Zhi\Desktop\health-self-healing-hermes\.agent_backups\app.py.bak_20260608_144930
+2026-06-08 14:49:30,668 [INFO] WRITE C:\Users\Zhi\Desktop\health-self-healing-hermes\app.py
+2026-06-08 14:49:30,672 [INFO]   [widget_keys] fixed keys in app.py
+2026-06-08 14:49:30,744 [INFO] BACKUP C:\Users\Zhi\Desktop\health-self-healing-hermes\ctca_panel_viewer.py → C:\Users\Zhi\Desktop\health-self-healing-hermes\.agent_backups\ctca_panel_viewer.py.bak_20260608_144930
+2026-06-08 14:49:30,749 [INFO] WRITE C:\Users\Zhi\Desktop\health-self-healing-hermes\ctca_panel_viewer.py
+2026-06-08 14:49:30,750 [INFO]   [widget_keys] fixed keys in ctca_panel_viewer.py
+2026-06-08 14:49:30,779 [INFO] BACKUP C:\Users\Zhi\Desktop\health-self-healing-hermes\fix_ctca_keys.py → C:\Users\Zhi\Desktop\health-self-healing-hermes\.agent_backups\fix_ctca_keys.py.bak_20260608_144930
+2026-06-08 14:49:30,783 [INFO] WRITE C:\Users\Zhi\Desktop\health-self-healing-hermes\fix_ctca_keys.py
+2026-06-08 14:49:30,785 [INFO]   [widget_keys] fixed keys in fix_ctca_keys.py
+2026-06-08 14:49:30,916 [INFO] BACKUP C:\Users\Zhi\Desktop\health-self-healing-hermes\push_chat.py → C:\Users\Zhi\Desktop\health-self-healing-hermes\.agent_backups\push_chat.py.bak_20260608_144930
+2026-06-08 14:49:30,924 [INFO] WRITE C:\Users\Zhi\Desktop\health-self-healing-hermes\push_chat.py
+2026-06-08 14:49:30,926 [INFO]   [widget_keys] fixed keys in push_chat.py
+2026-06-08 14:49:30,932 [INFO]   ✓ applied
+
+2026-06-08 14:49:30,934 [INFO] [7/9] page_registry_ctca
+2026-06-08 14:49:30,935 [INFO]          Register CTCA Panel View in app.py page map
+2026-06-08 14:49:31,003 [INFO]   ✓ OK — skip
+
+2026-06-08 14:49:31,004 [INFO] [8/9] disclaimer_modal_center
+2026-06-08 14:49:31,005 [INFO]          Replace inline disclaimer with centred overlay modal (scans all .py files)
+2026-06-08 14:50:01,563 [INFO]   ✓ OK — skip
+
+2026-06-08 14:50:01,564 [INFO] [9/9] nexus_single_user
+2026-06-08 14:50:01,565 [INFO]          Add NEXUS_SINGLE_USER_MODE env fallback
+2026-06-08 14:50:10,184 [INFO]   ✓ OK — skip
+
+2026-06-08 14:50:10,186 [INFO] 
+Staging 2 files…
+2026-06-08 14:50:10,187 [INFO] GIT git add C:\Users\Zhi\Desktop\health-self-healing-hermes\app.py C:\Users\Zhi\Desktop\health-self-healing-hermes\pages
+2026-06-08 14:50:10,358 [INFO] GIT git commit -m [TroubleshootAgent v2] auto-fix: remove_temp_reset, duplicate_widget_keys
+2026-06-08 14:50:13,501 [INFO] Pushing…
+2026-06-08 14:50:13,502 [INFO] GIT git push huggingface main
+2026-06-08 14:50:24,407 [INFO]   ✓ Pushed → huggingface/main
+2026-06-08 14:50:24,408 [INFO] GIT git push origin main
+2026-06-08 14:50:43,140 [INFO]   ✓ Pushed → origin/main
+2026-06-08 14:50:43,142 [INFO] 
+Waiting 90s for HF Space rebuild…
+2026-06-08 14:50:43,143 [INFO]   90s…
+2026-06-08 14:50:58,144 [INFO]   75s…
+2026-06-08 14:51:13,146 [INFO]   60s…
+2026-06-08 14:51:28,147 [INFO]   45s…
+2026-06-08 14:51:43,149 [INFO]   30s…
+2026-06-08 14:51:58,150 [INFO]   15s…
+2026-06-08 14:52:13,153 [INFO] 
+================================================================
+2026-06-08 14:52:13,154 [INFO] SUMMARY
+2026-06-08 14:52:13,155 [INFO]   Applied             : ['remove_temp_reset', 'duplicate_widget_keys']
+2026-06-08 14:52:13,156 [INFO]   Skipped (OK)        : ['requirements_baseline', 'auth_role_column', 'totp_valid_window', 'db_hf_persistence', 'page_registry_ctca', 'disclaimer_modal_center', 'nexus_single_user']
+2026-06-08 14:52:13,157 [INFO]   Failed              : ['(none)']
+2026-06-08 14:52:13,158 [INFO]   Security violations : 0 (see troubleshoot_audit.log)
+2026-06-08 14:52:13,159 [INFO] 
+  🟢 All checks passed.
+2026-06-08 14:52:13,160 [INFO]   → huggingface.co/spaces/aiq00479/health-self-healing-hermes
+2026-06-08 14:52:13,160 [INFO] ================================================================
+2026-06-08 14:52:13,162 [INFO] === RUN END applied=['remove_temp_reset', 'duplicate_widget_keys'] failed=[] violations=0 ===
+2026-06-09 00:32:49,794 [INFO] ================================================================
+2026-06-09 00:32:49,796 [INFO] HEALTH HERMES // TROUBLESHOOT AGENT v3.0 — Recursive Self-Improvement
+2026-06-09 00:32:49,797 [INFO]   Project root : C:\Users\Zhi\Desktop\health-self-healing-hermes
+2026-06-09 00:32:49,798 [INFO]   Dry run      : False
+2026-06-09 00:32:49,799 [INFO] ================================================================
+2026-06-09 00:32:49,799 [INFO] === RUN START dry_run=False ===
+2026-06-09 00:32:49,801 [INFO] 
+[PRE-FLIGHT] Scanning for predicted future errors…
+2026-06-09 00:33:12,026 [INFO]   Found 10 predicted issue(s):
+2026-06-09 00:33:12,026 [INFO]     ⚠ brain_ml_skills.py: PIL/Pillow import found — ensure Pillow in requirements.txt
+2026-06-09 00:33:12,027 [INFO]     ⚠ cardio_router_gemini.py: PIL/Pillow import found — ensure Pillow in requirements.txt
+2026-06-09 00:33:12,028 [INFO]     ⚠ medical_router_gemini.py: PIL/Pillow import found — ensure Pillow in requirements.txt
+2026-06-09 00:33:12,029 [INFO]     ⚠ mra_brain_28May2022.py: PIL/Pillow import found — ensure Pillow in requirements.txt
+2026-06-09 00:33:12,030 [INFO]     ⚠ mra_brain_28May2022_v1.py: PIL/Pillow import found — ensure Pillow in requirements.txt
+2026-06-09 00:33:12,030 [INFO]     ⚠ mra_brain_28May2022_v2.py: PIL/Pillow import found — ensure Pillow in requirements.txt
+2026-06-09 00:33:12,031 [INFO]     ⚠ mri_analysis_v3.py: PIL/Pillow import found — ensure Pillow in requirements.txt
+2026-06-09 00:33:12,032 [INFO]     ⚠ dicom_slice_finder.py: PIL/Pillow import found — ensure Pillow in requirements.txt
+2026-06-09 00:33:12,032 [INFO]     ⚠ medical_vision_agent.py: PIL/Pillow import found — ensure Pillow in requirements.txt
+2026-06-09 00:33:12,033 [INFO]     ⚠ medical_vision_agent_codex.py: PIL/Pillow import found — ensure Pillow in requirements.txt
+2026-06-09 00:33:12,033 [INFO] 
+Loaded 9 fixers (including 10 predicted)
+
+2026-06-09 00:33:12,034 [INFO] [1/9] requirements_baseline
+2026-06-09 00:33:12,035 [INFO]          Ensure baseline Python deps in requirements.txt
+2026-06-09 00:33:12,073 [INFO]   ✓ OK — skip
+
+2026-06-09 00:33:12,074 [INFO] [2/9] remove_temp_reset
+2026-06-09 00:33:12,075 [INFO]          Remove temporary /reset endpoint
+2026-06-09 00:33:20,427 [INFO]   ⚙ fix needed…
+2026-06-09 00:33:28,688 [ERROR]   ❌ AST validation FAILED for troubleshoot_agent.py: SyntaxError at line 497: unterminated string literal (detected at line 497)
+2026-06-09 00:33:28,690 [ERROR]   ❌ File NOT written — patch rejected to protect the project
+2026-06-09 00:33:28,691 [WARNING]   attempt 1/3 returned False
+2026-06-09 00:33:37,661 [ERROR]   ❌ AST validation FAILED for troubleshoot_agent.py: SyntaxError at line 497: unterminated string literal (detected at line 497)
+2026-06-09 00:33:37,661 [ERROR]   ❌ File NOT written — patch rejected to protect the project
+2026-06-09 00:33:37,662 [WARNING]   attempt 2/3 returned False
+2026-06-09 00:33:47,262 [ERROR]   ❌ AST validation FAILED for troubleshoot_agent.py: SyntaxError at line 497: unterminated string literal (detected at line 497)
+2026-06-09 00:33:47,263 [ERROR]   ❌ File NOT written — patch rejected to protect the project
+2026-06-09 00:33:47,264 [WARNING]   attempt 3/3 returned False
+2026-06-09 00:33:47,266 [WARNING]   ✗ all strategies failed — escalating to LLM…
+2026-06-09 00:33:47,267 [INFO]   [LLM] synthesising fixer for: Remove temporary /reset endpoint
+2026-06-09 00:33:49,094 [WARNING]   ANTHROPIC_API_KEY not set — LLM synthesis unavailable
+2026-06-09 00:33:49,095 [WARNING]   [LLM] synthesis unavailable
+
+2026-06-09 00:33:49,096 [INFO] [3/9] auth_role_column
+2026-06-09 00:33:49,097 [INFO]          Add role column + admin auto-promote to auth.py
+2026-06-09 00:33:49,099 [INFO]   ✓ OK — skip
+
+2026-06-09 00:33:49,100 [INFO] [4/9] totp_valid_window
+2026-06-09 00:33:49,100 [INFO]          Add valid_window=2 to TOTP verify calls
+2026-06-09 00:33:49,102 [INFO]   ✓ OK — skip
+
+2026-06-09 00:33:49,104 [INFO] [5/9] db_hf_persistence
+2026-06-09 00:33:49,104 [INFO]          Add HF Dataset DB sync to auth.py
+2026-06-09 00:33:49,106 [INFO]   ✓ OK — skip
+
+2026-06-09 00:33:49,107 [INFO] [6/9] duplicate_widget_keys
+2026-06-09 00:33:49,108 [INFO]          Fix duplicate/missing widget keys (AST-validated)
+2026-06-09 00:33:57,365 [INFO]   [widget_keys] issue detected in fix_ctca_keys.py
+2026-06-09 00:33:57,366 [INFO]   ⚙ fix needed…
+2026-06-09 00:34:05,499 [INFO] BACKUP C:\Users\Zhi\Desktop\health-self-healing-hermes\fix_ctca_keys.py → C:\Users\Zhi\Desktop\health-self-healing-hermes\.agent_backups\fix_ctca_keys.py.bak_20260609_003405
+2026-06-09 00:34:05,503 [INFO] WRITE C:\Users\Zhi\Desktop\health-self-healing-hermes\fix_ctca_keys.py
+2026-06-09 00:34:05,503 [INFO]   [widget_keys] ✓ fixed fix_ctca_keys.py
+2026-06-09 00:34:06,426 [INFO] BACKUP C:\Users\Zhi\Desktop\health-self-healing-hermes\pages\login.py → C:\Users\Zhi\Desktop\health-self-healing-hermes\.agent_backups\login.py.bak_20260609_003406
+2026-06-09 00:34:06,430 [INFO] WRITE C:\Users\Zhi\Desktop\health-self-healing-hermes\pages\login.py
+2026-06-09 00:34:06,431 [INFO]   [widget_keys] ✓ fixed login.py
+2026-06-09 00:34:06,454 [INFO]   ✓ applied
+
+2026-06-09 00:34:06,455 [INFO] [7/9] page_registry_ctca
+2026-06-09 00:34:06,456 [INFO]          Register CTCA Panel View in app.py page map
+2026-06-09 00:34:06,458 [INFO]   ✓ OK — skip
+
+2026-06-09 00:34:06,458 [INFO] [8/9] disclaimer_modal_center
+2026-06-09 00:34:06,459 [INFO]          Centred disclaimer with visible acknowledge button (v3)
+2026-06-09 00:34:22,645 [INFO]   ⚙ fix needed…
+2026-06-09 00:34:38,544 [INFO]   [disclaimer] ✓ already correct in troubleshoot_agent.py
+2026-06-09 00:34:38,546 [INFO]   [disclaimer] patching push_chat.py
+2026-06-09 00:34:38,561 [INFO] BACKUP C:\Users\Zhi\Desktop\health-self-healing-hermes\push_chat.py → C:\Users\Zhi\Desktop\health-self-healing-hermes\.agent_backups\push_chat.py.bak_20260609_003438
+2026-06-09 00:34:38,564 [INFO] WRITE C:\Users\Zhi\Desktop\health-self-healing-hermes\push_chat.py
+2026-06-09 00:34:38,565 [INFO]   [disclaimer] ✓ applied to push_chat.py
+2026-06-09 00:34:38,567 [INFO]   [disclaimer] patching chat.py
+2026-06-09 00:34:38,585 [INFO] BACKUP C:\Users\Zhi\Desktop\health-self-healing-hermes\pages\chat.py → C:\Users\Zhi\Desktop\health-self-healing-hermes\.agent_backups\chat.py.bak_20260609_003438
+2026-06-09 00:34:38,589 [INFO] WRITE C:\Users\Zhi\Desktop\health-self-healing-hermes\pages\chat.py
+2026-06-09 00:34:38,590 [INFO]   [disclaimer] ✓ applied to chat.py
+2026-06-09 00:34:38,591 [INFO]   ✓ applied
+
+2026-06-09 00:34:38,591 [INFO] [9/9] nexus_single_user
+2026-06-09 00:34:38,592 [INFO]          Add NEXUS_SINGLE_USER_MODE env fallback
+2026-06-09 00:34:46,795 [INFO]   ✓ OK — skip
+
+2026-06-09 00:34:46,797 [INFO] 
+Staging 1 changed paths…
+2026-06-09 00:34:46,798 [INFO] GIT git add C:\Users\Zhi\Desktop\health-self-healing-hermes\pages
+2026-06-09 00:34:46,966 [INFO] GIT git commit -m [TroubleshootAgent v3] auto-fix: duplicate_widget_keys, disclaimer_modal_center
+2026-06-09 00:34:50,228 [INFO] Pushing to remotes…
+2026-06-09 00:34:50,229 [INFO] GIT git push huggingface main
+2026-06-09 00:35:03,911 [INFO]   ✓ Pushed → huggingface/main
+2026-06-09 00:35:03,913 [INFO] GIT git push origin main
+2026-06-09 00:35:21,914 [INFO]   ✓ Pushed → origin/main
+2026-06-09 00:35:21,915 [INFO] 
+Waiting 90s for HF Space rebuild…
+2026-06-09 00:35:21,917 [INFO]   90s…
+2026-06-09 00:35:36,919 [INFO]   75s…
+2026-06-09 00:35:51,920 [INFO]   60s…
+2026-06-09 00:36:06,922 [INFO]   45s…
+2026-06-09 00:36:21,924 [INFO]   30s…
+2026-06-09 00:36:36,925 [INFO]   15s…
+2026-06-09 00:36:51,926 [INFO] 
+================================================================
+2026-06-09 00:36:51,928 [INFO] SUMMARY
+2026-06-09 00:36:51,929 [INFO]   Applied             : ['duplicate_widget_keys', 'disclaimer_modal_center']
+2026-06-09 00:36:51,930 [INFO]   Skipped (OK)        : ['requirements_baseline', 'auth_role_column', 'totp_valid_window', 'db_hf_persistence', 'page_registry_ctca', 'nexus_single_user']
+2026-06-09 00:36:51,930 [INFO]   Failed              : ['remove_temp_reset']
+2026-06-09 00:36:51,931 [INFO]   Security violations : 0
+2026-06-09 00:36:51,931 [INFO] 
+  🔴 1 fixer(s) failed — check logs.
+2026-06-09 00:36:51,932 [INFO] ================================================================
+2026-06-09 00:36:51,933 [INFO] === RUN END applied=['duplicate_widget_keys', 'disclaimer_modal_center'] failed=['remove_temp_reset'] violations=0 ===

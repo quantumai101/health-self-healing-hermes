@@ -1,0 +1,1032 @@
+"""
+troubleshoot_agent.py
+=====================
+HEALTH HERMES // AUTONOMOUS TROUBLESHOOT AGENT v2.0
+Self-healing, self-improving, security-hardened agent.
+
+NEW IN v2.0:
+  - SecurityHarness: blocks ALL destructive git/file operations
+  - Disclaimer fixer now scans every .py file in the project tree
+  - Duplicate-key scanner covers ALL pages/, not just ctca_panel_viewer.py
+  - Audit log of every file touched and every git command attempted
+  - LLM-synthesised fixers run in a restricted namespace (no os.remove, no shutil.rmtree, etc.)
+
+Run from project root:
+    python troubleshoot_agent.py [--dry-run] [--verbose]
+"""
+
+import os, re, sys, json, time, shutil, hashlib, textwrap
+import subprocess, argparse, logging
+from pathlib import Path
+from datetime import datetime
+from typing import Optional
+
+# ─── Config ───────────────────────────────────────────────────────────────────
+PROJECT_ROOT  = Path(__file__).parent
+ADMIN_EMAIL   = "aiq00479@gmail.com"
+ANTHROPIC_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+GIT_REMOTES   = ["huggingface main", "origin main"]
+LOG_FILE      = PROJECT_ROOT / "troubleshoot_agent.log"
+AUDIT_FILE    = PROJECT_ROOT / "troubleshoot_audit.log"
+SYNTH_DIR     = PROJECT_ROOT / "agent_fixes_synth"
+BACKUP_DIR    = PROJECT_ROOT / ".agent_backups"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler(LOG_FILE),
+        logging.StreamHandler(sys.stdout),
+    ],
+)
+log = logging.getLogger("TroubleshootAgent")
+
+audit_log = logging.getLogger("TroubleshootAudit")
+audit_handler = logging.FileHandler(AUDIT_FILE)
+audit_handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+audit_log.addHandler(audit_handler)
+audit_log.setLevel(logging.INFO)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SECURITY HARNESS
+# Every destructive operation goes through this class first.
+# If it is not on the allow-list it is BLOCKED and logged.
+# ═══════════════════════════════════════════════════════════════════════════════
+class SecurityHarness:
+    """
+    Enforces the principle of least privilege for the agent.
+
+    WHAT IT BLOCKS (always):
+      - git rm, git clean, git reset --hard, git push --force
+      - git push to any remote NOT in ALLOWED_REMOTES
+      - Any shell command containing rm -rf, shutil.rmtree, os.remove on
+        project root or parent directories
+      - Writing outside PROJECT_ROOT
+      - Deleting .py, .db, .toml, .yaml, .json files (only BACKUP copies allowed)
+      - Pushing branches other than 'main'
+
+    WHAT IT ALLOWS:
+      - git add, git commit, git push <allowed_remote> main
+      - Writing/overwriting .py files INSIDE PROJECT_ROOT (after backup)
+      - Appending to requirements.txt
+      - Creating new files inside PROJECT_ROOT
+    """
+
+    ALLOWED_REMOTES = {"huggingface", "origin"}
+    ALLOWED_BRANCH  = "main"
+
+    # Git sub-commands that are NEVER allowed regardless of args
+    BLOCKED_GIT_SUBCMDS = {
+        "rm", "clean", "bisect", "filter-branch",
+        "update-ref", "symbolic-ref",
+    }
+
+    # Git flags that are never allowed
+    BLOCKED_GIT_FLAGS = {"--force", "-f", "--hard", "--mirror", "--delete"}
+
+    # Shell tokens that suggest destructive intent
+    BLOCKED_SHELL_TOKENS = {
+        "rm -rf", "rmdir /s", "shutil.rmtree", "os.remove(",
+        "os.unlink(", "pathlib.Path.unlink", ".unlink(",
+        "DELETE FROM", "DROP TABLE", "TRUNCATE",
+    }
+
+    def __init__(self):
+        self._violations: list[str] = []
+
+    @property
+    def violations(self):
+        return list(self._violations)
+
+    def check_git_cmd(self, cmd: list[str]) -> tuple[bool, str]:
+        """
+        Returns (allowed: bool, reason: str).
+        Call BEFORE any subprocess git invocation.
+        """
+        if not cmd or cmd[0] != "git":
+            return True, "ok"
+
+        subcmd = cmd[1] if len(cmd) > 1 else ""
+
+        # Block forbidden sub-commands
+        if subcmd in self.BLOCKED_GIT_SUBCMDS:
+            reason = f"BLOCKED git sub-command: {subcmd}"
+            self._record_violation(reason, cmd)
+            return False, reason
+
+        # Block forbidden flags in any position
+        for flag in self.BLOCKED_GIT_FLAGS:
+            if flag in cmd:
+                reason = f"BLOCKED git flag: {flag}"
+                self._record_violation(reason, cmd)
+                return False, reason
+
+        # For push: only to allowed remotes, only 'main' branch
+        if subcmd == "push":
+            # cmd structure: git push <remote> <branch>
+            remote = cmd[2] if len(cmd) > 2 else ""
+            branch = cmd[3] if len(cmd) > 3 else ""
+            if remote not in self.ALLOWED_REMOTES:
+                reason = f"BLOCKED push to non-whitelisted remote: '{remote}'"
+                self._record_violation(reason, cmd)
+                return False, reason
+            if branch and branch != self.ALLOWED_BRANCH:
+                reason = f"BLOCKED push to non-main branch: '{branch}'"
+                self._record_violation(reason, cmd)
+                return False, reason
+
+        return True, "ok"
+
+    def check_file_write(self, path: Path) -> tuple[bool, str]:
+        """
+        Returns (allowed: bool, reason: str).
+        Call BEFORE writing or creating any file.
+        """
+        path = path.resolve()
+        root = PROJECT_ROOT.resolve()
+
+        # Must stay inside project root
+        try:
+            path.relative_to(root)
+        except ValueError:
+            reason = f"BLOCKED write outside project root: {path}"
+            self._record_violation(reason, str(path))
+            return False, reason
+
+        # Never write into .git/
+        if ".git" in path.parts:
+            reason = f"BLOCKED write into .git directory: {path}"
+            self._record_violation(reason, str(path))
+            return False, reason
+
+        return True, "ok"
+
+    def check_file_delete(self, path: Path) -> tuple[bool, str]:
+        """Deleting source files is NEVER allowed."""
+        reason = f"BLOCKED file deletion attempt: {path}"
+        self._record_violation(reason, str(path))
+        return False, reason
+
+    def check_synthesised_code(self, code: str) -> tuple[bool, str]:
+        """
+        Scan LLM-generated code for dangerous tokens before exec().
+        """
+        for token in self.BLOCKED_SHELL_TOKENS:
+            if token in code:
+                reason = f"BLOCKED synthesised code contains dangerous token: '{token}'"
+                self._record_violation(reason, f"code snippet: {code[:120]}")
+                return False, reason
+        # Block subprocess / os.system calls in synth code
+        if re.search(r'\bsubprocess\b|\bos\.system\b|\bos\.popen\b', code):
+            reason = "BLOCKED synthesised code attempts subprocess/os.system call"
+            self._record_violation(reason, f"code snippet: {code[:120]}")
+            return False, reason
+        return True, "ok"
+
+    def _record_violation(self, reason: str, detail):
+        entry = f"SECURITY VIOLATION: {reason} | detail={detail}"
+        self._violations.append(entry)
+        audit_log.warning(entry)
+        log.error(f"  🔴 {entry}")
+
+
+# Singleton — shared by all components
+SECURITY = SecurityHarness()
+
+
+# ─── Backup helper ────────────────────────────────────────────────────────────
+def backup(path: Path) -> Path:
+    """Copy file into .agent_backups/ before modification. Returns backup path."""
+    BACKUP_DIR.mkdir(exist_ok=True)
+    ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
+    name = path.name + f".bak_{ts}"
+    bak  = BACKUP_DIR / name
+    shutil.copy2(path, bak)
+    audit_log.info(f"BACKUP {path} → {bak}")
+    return bak
+
+
+def safe_write(path: Path, content: str) -> bool:
+    """Write file only if SecurityHarness approves. Always backs up first."""
+    allowed, reason = SECURITY.check_file_write(path)
+    if not allowed:
+        return False
+    if path.exists():
+        backup(path)
+    path.write_text(content, encoding="utf-8")
+    audit_log.info(f"WRITE {path}")
+    return True
+
+
+# ─── GitOps ───────────────────────────────────────────────────────────────────
+class GitOps:
+    @staticmethod
+    def run(cmd: list[str], check=True):
+        allowed, reason = SECURITY.check_git_cmd(cmd)
+        if not allowed:
+            log.warning(f"  Git command blocked by SecurityHarness: {reason}")
+            return False, "", reason
+
+        audit_log.info(f"GIT {' '.join(cmd)}")
+        r = subprocess.run(cmd, capture_output=True, text=True, cwd=PROJECT_ROOT)
+        ok = r.returncode == 0
+        if not ok and check:
+            log.warning(f"  Git cmd failed: {r.stderr.strip()[:120]}")
+        return ok, r.stdout, r.stderr
+
+    @staticmethod
+    def stage(*paths):
+        existing = [str(p) for p in paths if Path(p).exists()]
+        if existing:
+            GitOps.run(["git", "add"] + existing)
+
+    @staticmethod
+    def commit(msg: str) -> bool:
+        safe_msg = msg[:200]   # cap commit message length
+        ok, _, err = GitOps.run(
+            ["git", "commit", "-m", f"[TroubleshootAgent v2] {safe_msg}"], check=False
+        )
+        return ok or "nothing to commit" in err
+
+    @staticmethod
+    def push() -> bool:
+        success = True
+        for remote_branch in GIT_REMOTES:
+            remote, branch = remote_branch.split()
+            ok, _, err = GitOps.run(["git", "push", remote, branch], check=False)
+            if not ok:
+                log.warning(f"  Push to {remote}/{branch} failed: {err.strip()[:80]}")
+                success = False
+            else:
+                log.info(f"  ✓ Pushed → {remote}/{branch}")
+        return success
+
+    @staticmethod
+    def commit_and_push(msg: str, *paths) -> bool:
+        GitOps.stage(*paths)
+        GitOps.commit(msg)
+        return GitOps.push()
+
+
+# ─── LLM Fixer (Anthropic API) ────────────────────────────────────────────────
+def llm_synthesise_fixer(error_text: str, file_content: str, context: dict) -> Optional[str]:
+    if not ANTHROPIC_KEY:
+        log.warning("  ANTHROPIC_API_KEY not set – LLM synthesis unavailable.")
+        return None
+    try:
+        import anthropic
+    except ImportError:
+        log.warning("  anthropic not installed – pip install anthropic")
+        return None
+
+    client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
+    system = textwrap.dedent("""
+        You are an expert Python + Streamlit engineer for the Health Digital Workforce
+        platform (health-self-healing-hermes).
+
+        Produce a MINIMAL, SAFE patch function:
+
+            def apply(root: Path) -> bool:
+                \"\"\"One-line description.\"\"\"
+                ...
+                return True
+
+        STRICT RULES — your code will be security-scanned before execution:
+        - NO subprocess, os.system, os.popen, os.remove, os.unlink calls.
+        - NO shutil.rmtree, shutil.move calls.
+        - NO file writes outside root/.
+        - NO git operations — the orchestrator handles git.
+        - Always backup before modifying: shutil.copy2(f, Path(str(f)+'.bak_synth'))
+        - Return False if preconditions not met.
+        - Output ONLY the function. No markdown fences. Under 60 lines.
+    """).strip()
+
+    user = f"ERROR:\n{error_text[:800]}\n\nFILE:\n{file_content[:1000]}\n\nCONTEXT:\n{json.dumps(context)[:300]}\n\nProduce apply()."
+
+    try:
+        resp = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=1024,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+        )
+        raw = resp.content[0].text.strip()
+        raw = re.sub(r"^```python\n?", "", raw)
+        raw = re.sub(r"\n?```$", "", raw)
+        return raw.strip()
+    except Exception as e:
+        log.error(f"  LLM API error: {e}")
+        return None
+
+
+def run_synthesised_fixer(code: str, label: str, dry_run: bool) -> bool:
+    SYNTH_DIR.mkdir(exist_ok=True)
+    slug = hashlib.md5(label.encode()).hexdigest()[:8]
+    fixer_path = SYNTH_DIR / f"synth_{slug}.py"
+
+    # ── Security scan BEFORE writing or running ──
+    allowed, reason = SECURITY.check_synthesised_code(code)
+    if not allowed:
+        log.error(f"  [LLM-Synth] code REJECTED by SecurityHarness: {reason}")
+        return False
+
+    fixer_path.write_text(code, encoding="utf-8")
+    audit_log.info(f"SYNTH_WRITE {fixer_path}")
+    log.info(f"  [LLM-Synth] fixer saved → {fixer_path.name}")
+
+    if dry_run:
+        log.info("  [LLM-Synth] dry-run: not executing")
+        return False
+
+    # Restricted namespace — no dangerous builtins exposed
+    safe_ns = {
+        "Path": Path,
+        "re": re,
+        "shutil": shutil,
+        "__name__": "__synth__",
+        "__builtins__": {
+            k: __builtins__[k] if isinstance(__builtins__, dict) else getattr(__builtins__, k)
+            for k in [
+                "open", "len", "str", "int", "bool", "list", "dict", "tuple",
+                "print", "range", "enumerate", "isinstance", "hasattr",
+                "getattr", "setattr", "Exception", "True", "False", "None",
+            ]
+            if (isinstance(__builtins__, dict) and k in __builtins__)
+               or (not isinstance(__builtins__, dict) and hasattr(__builtins__, k))
+        },
+    }
+    try:
+        exec(compile(code, str(fixer_path), "exec"), safe_ns)
+        apply_fn = safe_ns.get("apply")
+        if not apply_fn:
+            log.error("  [LLM-Synth] no apply() found")
+            return False
+        result = bool(apply_fn(PROJECT_ROOT))
+        audit_log.info(f"SYNTH_EXEC {label} result={result}")
+        return result
+    except Exception as e:
+        log.error(f"  [LLM-Synth] execution error: {e}")
+        return False
+
+
+# ─── Fixer Registry ───────────────────────────────────────────────────────────
+class FixerRegistry:
+    def __init__(self):
+        self._fixers: list[dict] = []
+        self._register_all()
+
+    def register(self, fixer: dict):
+        self._fixers.append(fixer)
+
+    def sorted_fixers(self) -> list[dict]:
+        return sorted(self._fixers, key=lambda f: f.get("priority", 99))
+
+    def _file(self, rel) -> Path:
+        return PROJECT_ROOT / rel
+
+    def _src(self, rel) -> str:
+        p = self._file(rel)
+        return p.read_text(encoding="utf-8") if p.exists() else ""
+
+    def _find_files_containing(self, pattern: str, extensions=(".py",)) -> list[Path]:
+        """Recursively scan project for files containing `pattern`."""
+        matches = []
+        for ext in extensions:
+            for f in PROJECT_ROOT.rglob(f"*{ext}"):
+                # Skip hidden dirs, backups, synth dir, venv
+                skip_parts = {".git", "__pycache__", ".venv", "venv",
+                              "agent_fixes_synth", ".agent_backups"}
+                if any(p in skip_parts for p in f.parts):
+                    continue
+                try:
+                    if pattern in f.read_text(encoding="utf-8", errors="ignore"):
+                        matches.append(f)
+                except Exception:
+                    pass
+        return matches
+
+    # ── FIX 1: requirements baseline ──────────────────────────────────────────
+    def _reg_requirements(self):
+        REQ = "requirements.txt"
+        NEEDED = {
+            "pyotp":       "pyotp>=2.9.0",
+            "pydicom":     "pydicom>=2.4.0",
+            "duckdb":      "duckdb>=0.10.0",
+            "streamlit":   "streamlit>=1.35.0",
+            "huggingface_hub": "huggingface_hub>=0.20.0",
+        }
+
+        def check():
+            s = self._src(REQ)
+            return any(k not in s for k in NEEDED)
+
+        def apply():
+            p   = self._file(REQ)
+            txt = p.read_text(encoding="utf-8") if p.exists() else ""
+            for k, spec in NEEDED.items():
+                if k not in txt:
+                    txt = txt.rstrip() + f"\n{spec}\n"
+            return safe_write(p, txt)
+
+        self.register(dict(id="requirements_baseline", priority=2,
+            description="Ensure baseline Python deps in requirements.txt",
+            check=check, apply=apply, files=["requirements.txt"]))
+
+    # ── FIX 2: remove temp reset endpoint ────────────────────────────────────
+    def _reg_remove_reset_endpoint(self):
+        MARKER = "# TEMP: reset endpoint"
+
+        def check():
+            files = self._find_files_containing(MARKER)
+            return len(files) > 0
+
+        def apply():
+            files = self._find_files_containing(MARKER)
+            ok = False
+            for p in files:
+                src = p.read_text(encoding="utf-8")
+                patched = re.sub(
+                    rf"{re.escape(MARKER)}.*?(?=\ndef |\nclass |\nif __name__)",
+                    "", src, flags=re.DOTALL,
+                )
+                if patched != src:
+                    ok = safe_write(p, patched) or ok
+            return ok
+
+        self.register(dict(id="remove_temp_reset", priority=5,
+            description="Remove temporary /reset endpoint",
+            check=check, apply=apply, files=["app.py"]))
+
+    # ── FIX 3: auth role column ───────────────────────────────────────────────
+    def _reg_auth_role(self):
+        AUTH = "auth/auth.py"
+        MARKER = "AUTO-PROMOTE"
+
+        def check():
+            s = self._src(AUTH)
+            return bool(s) and MARKER not in s
+
+        def apply():
+            p   = self._file(AUTH)
+            src = p.read_text(encoding="utf-8")
+            # Try ALTER TABLE approach (works on existing DBs)
+            ALTER_BLOCK = (
+                "\n        # Add role column if upgrading existing DB\n"
+                "        try:\n"
+                "            conn.execute(\"ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'\")\n"
+                "            conn.commit()\n"
+                "        except Exception:\n"
+                "            pass\n"
+                "\n        # AUTO-PROMOTE admin\n"
+                "        conn.execute(\"\"\"\n"
+                f"            UPDATE users SET role='admin'\n"
+                f"            WHERE email='{ADMIN_EMAIL}'\n"
+                "            AND (role IS NULL OR role != 'admin')\n"
+                "        \"\"\")\n"
+                "        conn.commit()\n"
+            )
+            # Find end of executescript block
+            anchor = '        """)\n'
+            idx = src.find(anchor)
+            if idx == -1:
+                return False
+            patched = src[:idx + len(anchor)] + ALTER_BLOCK + src[idx + len(anchor):]
+            return safe_write(p, patched)
+
+        self.register(dict(id="auth_role_column", priority=10,
+            description="Add role column + admin auto-promote to auth.py",
+            check=check, apply=apply, files=["auth/auth.py"]))
+
+    # ── FIX 4: TOTP valid_window ──────────────────────────────────────────────
+    def _reg_totp_window(self):
+        AUTH = "auth/auth.py"
+
+        def check():
+            s = self._src(AUTH)
+            return bool(s) and "valid_window" not in s and "pyotp" in s
+
+        def apply():
+            p   = self._file(AUTH)
+            src = p.read_text(encoding="utf-8")
+            src = src.replace(".verify(token)", ".verify(token, valid_window=2)")
+            src = src.replace(".verify(otp)",   ".verify(otp, valid_window=2)")
+            return safe_write(p, src)
+
+        self.register(dict(id="totp_valid_window", priority=15,
+            description="Add valid_window=2 to TOTP verify calls",
+            check=check, apply=apply, files=["auth/auth.py"]))
+
+    # ── FIX 5: HF Dataset DB persistence ─────────────────────────────────────
+    def _reg_db_persistence(self):
+        AUTH = "auth/auth.py"
+
+        def check():
+            s = self._src(AUTH)
+            return bool(s) and "hf_db_sync" not in s
+
+        def apply():
+            p   = self._file(AUTH)
+            src = p.read_text(encoding="utf-8")
+
+            HF_BLOCK = '''
+# -- HF Dataset DB Sync (hf_db_sync) ------------------------------------------
+import threading as _threading
+try:
+    from huggingface_hub import hf_hub_download, HfApi as _HfApi
+    _HF_SYNC_OK = True
+except ImportError:
+    _HF_SYNC_OK = False
+
+_HF_REPO   = "aiq00479/health-hermes-db"
+_HF_FILE   = "users.db"
+_SYNC_LOCK = _threading.Lock()
+
+def _hf_token():
+    return os.getenv("HF_TOKEN", "")
+
+def hf_db_pull():
+    if not _HF_SYNC_OK or not _hf_token(): return
+    try:
+        local = hf_hub_download(repo_id=_HF_REPO, filename=_HF_FILE,
+            repo_type="dataset", token=_hf_token(),
+            local_dir=str(DB_PATH.parent), local_dir_use_symlinks=False)
+        import shutil as _sh
+        if Path(local) != DB_PATH: _sh.copy2(local, DB_PATH)
+    except Exception: pass
+
+def hf_db_push():
+    if not _HF_SYNC_OK or not _hf_token() or not DB_PATH.exists(): return
+    def _push():
+        with _SYNC_LOCK:
+            try:
+                _HfApi(token=_hf_token()).upload_file(
+                    path_or_fileobj=str(DB_PATH), path_in_repo=_HF_FILE,
+                    repo_id=_HF_REPO, repo_type="dataset")
+            except Exception: pass
+    _threading.Thread(target=_push, daemon=True).start()
+# -- hf_db_sync end ------------------------------------------------------------
+'''
+            lines = src.splitlines()
+            last_import = max(
+                (i for i, l in enumerate(lines) if l.startswith(("import ", "from "))),
+                default=0,
+            )
+            lines.insert(last_import + 1, HF_BLOCK)
+            patched = "\n".join(lines)
+            # Hook into init_db
+            patched = patched.replace(
+                'def init_db():\n    """Create tables',
+                'def init_db():\n    """Create tables',
+            )
+            for old_ret, new_ret in [
+                ("    return get_user_by_id(user_id)\n\n\ndef get_user_by_email",
+                 "    hf_db_push()\n    return get_user_by_id(user_id)\n\n\ndef get_user_by_email"),
+                ("    return token\n\n\ndef validate_session",
+                 "    hf_db_push()\n    return token\n\n\ndef validate_session"),
+            ]:
+                if old_ret in patched:
+                    patched = patched.replace(old_ret, new_ret)
+            return safe_write(p, patched)
+
+        self.register(dict(id="db_hf_persistence", priority=20,
+            description="Add HF Dataset DB sync to auth.py",
+            check=check, apply=apply, files=["auth/auth.py"]))
+
+    # ── FIX 6: duplicate st.button / st.toggle keys (ALL pages) ──────────────
+    def _reg_duplicate_widget_keys(self):
+        """
+        Scans EVERY .py file for duplicate widget keys and adds unique prefixes.
+        Covers ctca_panel_viewer.py and any other pages with the same pattern.
+        """
+        def check():
+            # Look for unqualified key patterns that are likely duplicated
+            patterns = [
+                r'key=f"sugg_\{i\}"',
+                r'key="animate_toggle"',
+                r'key="labels_toggle"',
+            ]
+            for p in patterns:
+                if self._find_files_containing(p.replace(r'\{i\}', '{i}').replace('r"','').replace('"','')):
+                    return True
+            # Also check for st.button/toggle calls WITHOUT keys in pages/
+            pages_dir = PROJECT_ROOT / "pages"
+            if pages_dir.exists():
+                for f in pages_dir.glob("*.py"):
+                    try:
+                        src = f.read_text(encoding="utf-8", errors="ignore")
+                        # Count st.button calls without key= argument
+                        btns_without_key = re.findall(
+                            r'st\.button\([^)]+\)(?![^)]*key=)', src
+                        )
+                        if len(btns_without_key) > 1:
+                            return True
+                    except Exception:
+                        pass
+            return False
+
+        def apply():
+            changed = False
+            pages_dir = PROJECT_ROOT / "pages"
+            if not pages_dir.exists():
+                return False
+
+            for f in pages_dir.glob("*.py"):
+                try:
+                    src = f.read_text(encoding="utf-8", errors="ignore")
+                    original = src
+                    prefix = f.stem  # e.g. "ctca_panel_viewer"
+
+                    # Fix generic suggestion loop keys
+                    src = src.replace('key=f"sugg_{i}"', f'key=f"{prefix}_sugg_{{i}}"')
+
+                    # Fix toggle keys missing unique prefix
+                    for old_pat, new_key in [
+                        ('st.toggle("Animate finding dots", value=False)',
+                         f'st.toggle("Animate finding dots", value=False, key="{prefix}_animate")'),
+                        ('st.toggle("Show slice labels", value=True)',
+                         f'st.toggle("Show slice labels", value=True, key="{prefix}_labels")'),
+                        ('st.toggle("Show annotations", value=True)',
+                         f'st.toggle("Show annotations", value=True, key="{prefix}_annotations")'),
+                    ]:
+                        if old_pat in src and f'key="{prefix}_' not in src:
+                            src = src.replace(old_pat, new_key)
+
+                    # Fix st.button calls in loops without keys
+                    def add_key_to_button(m):
+                        btn_call = m.group(0)
+                        if "key=" in btn_call:
+                            return btn_call
+                        label_match = re.search(r'st\.button\(["\']([^"\']+)', btn_call)
+                        if label_match:
+                            label_slug = re.sub(r'\W+', '_', label_match.group(1).lower())[:20]
+                            return btn_call.rstrip(')') + f', key="{prefix}_{label_slug}_btn")'
+                        return btn_call
+
+                    src = re.sub(r'st\.button\([^)]+\)', add_key_to_button, src)
+
+                    if src != original:
+                        safe_write(f, src)
+                        log.info(f"  [widget_keys] fixed keys in {f.name}")
+                        changed = True
+                except Exception as e:
+                    log.warning(f"  [widget_keys] could not process {f.name}: {e}")
+
+            return changed
+
+        self.register(dict(id="duplicate_widget_keys", priority=30,
+            description="Fix duplicate st.button/toggle keys across all pages",
+            check=check, apply=apply, files=["pages/"]))
+
+    # ── FIX 7: page registry (CTCA Panel View) ────────────────────────────────
+    def _reg_page_registry(self):
+        APP = "app.py"
+
+        def check():
+            s = self._src(APP)
+            return bool(s) and "ctca_panel_viewer" not in s
+
+        def apply():
+            p   = self._file(APP)
+            src = p.read_text(encoding="utf-8")
+
+            # Pattern A: dict registry
+            new_src, n = re.subn(
+                r'("compliance"[^\n]+\n)',
+                lambda m: m.group(0) + '    "ctca_panel_view": "pages/ctca_panel_viewer.py",\n',
+                src, count=1,
+            )
+            if n:
+                return safe_write(p, new_src)
+
+            # Pattern B: st.Page list
+            new_src, n = re.subn(
+                r'(st\.Page\(["\']pages/compliance[^)]+\)\s*[,\n])',
+                lambda m: m.group(0) + '    st.Page("pages/ctca_panel_viewer.py", title="CTCA Panel View", icon="🫀"),\n',
+                src, count=1,
+            )
+            if n:
+                return safe_write(p, new_src)
+
+            log.warning("  [page_registry] could not auto-insert – dumping page-related lines:")
+            for i, line in enumerate(src.splitlines()):
+                if any(x in line.lower() for x in ["pages/", "compliance", "st.page", "page_map"]):
+                    log.info(f"    L{i+1}: {line}")
+            return False
+
+        self.register(dict(id="page_registry_ctca", priority=40,
+            description="Register CTCA Panel View in app.py page map",
+            check=check, apply=apply, files=["app.py"]))
+
+    # ── FIX 8: Clinical Disclaimer — centred modal ────────────────────────────
+    def _reg_disclaimer_center(self):
+        """
+        v2 FIX: Scans ALL .py files (not just a hardcoded list) to find
+        where the disclaimer lives, then replaces inline warning with
+        a centred st.dialog modal.
+        """
+        DISCLAIMER_PATTERNS = [
+            "WARNING CLINICAL DISCLAIMER",
+            "clinical disclaimer",
+            "I acknowledge and accept the clinical disclaimer",
+        ]
+        ALREADY_FIXED_MARKER = "disclaimer_modal_v2"
+
+        def _find_disclaimer_files() -> list[Path]:
+            found = []
+            for pat in DISCLAIMER_PATTERNS:
+                found.extend(self._find_files_containing(pat))
+            # Deduplicate
+            seen = set()
+            result = []
+            for f in found:
+                if f not in seen:
+                    seen.add(f)
+                    result.append(f)
+            return result
+
+        def check():
+            files = _find_disclaimer_files()
+            for f in files:
+                src = f.read_text(encoding="utf-8", errors="ignore")
+                if ALREADY_FIXED_MARKER not in src:
+                    return True
+            return False
+
+        def apply():
+            files = _find_disclaimer_files()
+            if not files:
+                log.warning("  [disclaimer] Could not find disclaimer in any .py file.")
+                log.warning("  [disclaimer] Searched for: " + str(DISCLAIMER_PATTERNS))
+                return False
+
+            MODAL_CODE = '''
+# ── Clinical Disclaimer Modal (disclaimer_modal_v2 — TroubleshootAgent) ──────
+if "disclaimer_accepted" not in st.session_state:
+    st.session_state["disclaimer_accepted"] = False
+
+if not st.session_state["disclaimer_accepted"]:
+    # Use CSS to create a centred overlay without st.dialog (Streamlit ≥1.35)
+    st.markdown("""
+    <style>
+    .disclaimer-overlay {
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        background: rgba(0,0,0,0.75); z-index: 9999;
+        display: flex; align-items: center; justify-content: center;
+    }
+    .disclaimer-box {
+        background: #1a1a2e; border: 2px solid #f59e0b;
+        border-radius: 16px; padding: 2.5rem 3rem; max-width: 600px;
+        text-align: center; color: #fff;
+    }
+    .disclaimer-box h2 { color: #f59e0b; margin-bottom: 1rem; font-size: 1.4rem; }
+    .disclaimer-box p  { font-size: 1rem; line-height: 1.7; color: #d1d5db; }
+    </style>
+    <div class="disclaimer-overlay">
+      <div class="disclaimer-box">
+        <h2>⚕ WARNING — CLINICAL DISCLAIMER</h2>
+        <p>AI outputs are for <strong>decision support only</strong> and are
+        <strong>not diagnostic</strong>. All findings must be verified with
+        clinical data by a qualified healthcare professional before any
+        clinical action is taken.</p>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.markdown("<br>" * 12, unsafe_allow_html=True)
+    col_l, col_c, col_r = st.columns([1, 3, 1])
+    with col_c:
+        if st.button(
+            "✓  I acknowledge and accept the clinical disclaimer",
+            use_container_width=True,
+            type="primary",
+            key="clinical_disclaimer_modal_v2_btn",
+        ):
+            st.session_state["disclaimer_accepted"] = True
+            st.rerun()
+    st.stop()
+# ── End Clinical Disclaimer Modal ─────────────────────────────────────────────
+'''
+            changed = False
+            for f in files:
+                src = f.read_text(encoding="utf-8", errors="ignore")
+                if ALREADY_FIXED_MARKER in src:
+                    log.info(f"  [disclaimer] already fixed in {f.name} – skip")
+                    continue
+
+                log.info(f"  [disclaimer] found in {f.name} — applying modal fix")
+
+                # Remove old inline banner + acknowledge button block
+                patched = re.sub(
+                    r'st\.warning\(["\']WARNING CLINICAL DISCLAIMER[^)]+\)[^\n]*\n?',
+                    "",
+                    src,
+                )
+                # Remove old inline acknowledge button (various patterns)
+                patched = re.sub(
+                    r'if\s+st\.button\(["\']I acknowledge[^)]+\)[\s\S]{0,300}?st\.rerun\(\)',
+                    "",
+                    patched,
+                    flags=re.DOTALL,
+                )
+                # Remove old disclaimer_accepted session_state block if present
+                patched = re.sub(
+                    r'if ["\']disclaimer_accepted["\'] not in st\.session_state[\s\S]{0,200}?st\.stop\(\)\s*\n?',
+                    "",
+                    patched,
+                    flags=re.DOTALL,
+                )
+
+                # Inject modal at top, after imports
+                lines = patched.splitlines()
+                last_import_idx = 0
+                for i, line in enumerate(lines):
+                    if line.startswith(("import ", "from ")):
+                        last_import_idx = i
+                lines.insert(last_import_idx + 1, MODAL_CODE)
+                final = "\n".join(lines)
+
+                if safe_write(f, final):
+                    log.info(f"  [disclaimer] ✓ modal applied to {f.name}")
+                    changed = True
+
+            return changed
+
+        self.register(dict(id="disclaimer_modal_center", priority=50,
+            description="Replace inline disclaimer with centred overlay modal (scans all .py files)",
+            check=check, apply=apply, files=["<auto-detected>"]))
+
+    # ── FIX 9: NEXUS single-user mode ─────────────────────────────────────────
+    def _reg_nexus_single_user(self):
+        def check():
+            files = self._find_files_containing("session_key")
+            for f in files:
+                src = f.read_text(encoding="utf-8", errors="ignore")
+                if "NEXUS" in src and "NEXUS_SINGLE_USER_MODE" not in src:
+                    return True
+            return False
+
+        def apply():
+            files = self._find_files_containing("session_key")
+            for f in files:
+                src = f.read_text(encoding="utf-8", errors="ignore")
+                if "NEXUS" not in src or "NEXUS_SINGLE_USER_MODE" in src:
+                    continue
+                patch = (
+                    "\n# NEXUS single-user fallback (TroubleshootAgent)\n"
+                    "_NEXUS_SINGLE = os.getenv('NEXUS_SINGLE_USER_MODE', '0') == '1'\n\n"
+                )
+                patched = patch + src
+                if safe_write(f, patched):
+                    return True
+            return False
+
+        self.register(dict(id="nexus_single_user", priority=60,
+            description="Add NEXUS_SINGLE_USER_MODE env fallback",
+            check=check, apply=apply, files=["<auto-detected>"]))
+
+    def _register_all(self):
+        self._reg_requirements()
+        self._reg_remove_reset_endpoint()
+        self._reg_auth_role()
+        self._reg_totp_window()
+        self._reg_db_persistence()
+        self._reg_duplicate_widget_keys()
+        self._reg_page_registry()
+        self._reg_disclaimer_center()
+        self._reg_nexus_single_user()
+
+
+# ─── Orchestrator ─────────────────────────────────────────────────────────────
+class TroubleshootAgent:
+    def __init__(self, dry_run=False, verbose=False):
+        self.dry_run = dry_run
+        self.verbose = verbose
+        self.registry = FixerRegistry()
+        self.applied: list[str] = []
+        self.skipped: list[str] = []
+        self.failed:  list[str] = []
+        if verbose:
+            log.setLevel(logging.DEBUG)
+
+    def run(self):
+        log.info("=" * 64)
+        log.info("HEALTH HERMES // TROUBLESHOOT AGENT v2.0")
+        log.info(f"  Project root : {PROJECT_ROOT}")
+        log.info(f"  Dry run      : {self.dry_run}")
+        log.info(f"  Audit log    : {AUDIT_FILE}")
+        log.info(f"  Backups      : {BACKUP_DIR}/")
+        log.info("=" * 64)
+        audit_log.info(f"=== RUN START dry_run={self.dry_run} ===")
+
+        fixers = self.registry.sorted_fixers()
+        log.info(f"Loaded {len(fixers)} fixers\n")
+
+        changed_files: list[str] = []
+
+        for i, fixer in enumerate(fixers, 1):
+            fid, desc = fixer["id"], fixer["description"]
+            log.info(f"[{i}/{len(fixers)}] {fid}")
+            log.info(f"         {desc}")
+
+            try:
+                needed = fixer["check"]()
+            except Exception as e:
+                log.warning(f"  check() raised: {e} — skip")
+                self.skipped.append(fid)
+                continue
+
+            if not needed:
+                log.info("  ✓ OK — skip\n")
+                self.skipped.append(fid)
+                continue
+
+            log.info("  ⚙ fix needed…")
+            if self.dry_run:
+                log.info("  [dry-run] skip apply\n")
+                self.skipped.append(fid)
+                continue
+
+            try:
+                ok = fixer["apply"]()
+            except Exception as e:
+                log.error(f"  apply() raised: {e}")
+                ok = False
+
+            if ok:
+                log.info(f"  ✓ applied\n")
+                self.applied.append(fid)
+                changed_files.extend(fixer.get("files", []))
+            else:
+                log.warning(f"  ✗ failed — trying LLM fallback…")
+                self._llm_fallback(fid, desc)
+                self.failed.append(fid)
+
+        if changed_files and not self.dry_run:
+            existing = [
+                str(PROJECT_ROOT / f) for f in dict.fromkeys(changed_files)
+                if (PROJECT_ROOT / f).exists()
+            ]
+            msg = f"auto-fix: {', '.join(self.applied)}"
+            log.info(f"\nStaging {len(existing)} files…")
+            GitOps.stage(*existing)
+            GitOps.commit(msg)
+            log.info("Pushing…")
+            GitOps.push()
+            log.info("\nWaiting 90s for HF Space rebuild…")
+            for remaining in range(90, 0, -15):
+                log.info(f"  {remaining}s…")
+                time.sleep(15)
+        elif not changed_files:
+            log.info("\nNo changes needed — project is clean ✓")
+
+        self._print_summary()
+
+    def _llm_fallback(self, fid: str, desc: str):
+        snippets = {}
+        for rel in ["app.py", "auth/auth.py"]:
+            p = PROJECT_ROOT / rel
+            if p.exists():
+                snippets[rel] = p.read_text(encoding="utf-8")[:600]
+
+        code = llm_synthesise_fixer(
+            error_text=f"Fixer '{fid}' ({desc}) failed.",
+            file_content=str(snippets),
+            context={"fixer_id": fid, "admin": ADMIN_EMAIL},
+        )
+        if code:
+            ok = run_synthesised_fixer(code, fid, self.dry_run)
+            if ok:
+                self.applied.append(f"{fid}_llm")
+                log.info(f"  [LLM] ✓ synthesised fixer succeeded\n")
+            else:
+                log.warning(f"  [LLM] synthesised fixer also failed\n")
+        else:
+            log.warning("  [LLM] synthesis unavailable\n")
+
+    def _print_summary(self):
+        vcount = len(SECURITY.violations)
+        log.info("\n" + "=" * 64)
+        log.info("SUMMARY")
+        log.info(f"  Applied             : {self.applied or ['(none)']}")
+        log.info(f"  Skipped (OK)        : {self.skipped or ['(none)']}")
+        log.info(f"  Failed              : {self.failed or ['(none)']}")
+        log.info(f"  Security violations : {vcount} (see {AUDIT_FILE.name})")
+        if not self.failed:
+            log.info("\n  🟢 All checks passed.")
+            log.info("  → huggingface.co/spaces/aiq00479/health-self-healing-hermes")
+        else:
+            log.info(f"\n  🔴 {len(self.failed)} fixer(s) failed — check logs.")
+            log.info(f"  → Synthesised fixers: {SYNTH_DIR}/")
+        if vcount:
+            log.info(f"\n  ⚠ {vcount} security violations were BLOCKED — see {AUDIT_FILE}")
+        log.info("=" * 64)
+        audit_log.info(f"=== RUN END applied={self.applied} failed={self.failed} violations={vcount} ===")
+
+
+# ─── Entry point ─────────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Health Hermes Troubleshoot Agent v2")
+    parser.add_argument("--dry-run",  action="store_true", help="Scan only, no file changes")
+    parser.add_argument("--verbose",  action="store_true", help="Debug logging")
+    args = parser.parse_args()
+    TroubleshootAgent(dry_run=args.dry_run, verbose=args.verbose).run()

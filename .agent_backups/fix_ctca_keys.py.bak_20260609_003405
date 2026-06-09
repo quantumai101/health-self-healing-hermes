@@ -1,0 +1,44 @@
+"""
+fix_ctca_keys.py -- Fixes duplicate button key error in ctca_panel_viewer.py
+Run from project root: python fix_ctca_keys.py
+"""
+import sys, subprocess, shutil
+from pathlib import Path
+
+F = Path("pages") / "ctca_panel_viewer.py"
+if not F.exists():
+    print(f"ERROR: {F} not found.")
+    sys.exit(1)
+
+bak = F.with_suffix(".py.bak_keys")
+shutil.copy2(F, bak)
+
+src = F.read_text(encoding="utf-8")
+
+# Fix 1: prefix all st.button keys with "ctca_" to avoid collisions
+src = src.replace('key=f"fix_ctca_keys_sugg_{i}"', 'key=f"ctca_panel_sugg_{i}"')
+
+# Fix 2: prefix toggle keys
+src = src.replace(
+    'animate = st.toggle("Animate finding dots", key="fix_ctca_keys_animate", value=False)',
+    'animate = st.toggle("Animate finding dots", key="fix_ctca_keys_animate", value=False, key="ctca_animate_toggle")'
+)
+src = src.replace(
+    'show_labels = st.toggle("Show slice labels", key="fix_ctca_keys_labels", value=True)',
+    'show_labels = st.toggle("Show slice labels", key="fix_ctca_keys_labels", value=True, key="ctca_labels_toggle")'
+)
+
+F.write_text(src, encoding="utf-8")
+print("OK: Fixed button/toggle keys in ctca_panel_viewer.py")
+
+for cmd, desc in [
+    (["git", "add", "pages/ctca_panel_viewer.py"], "Staged"),
+    (["git", "commit", "-m", "fix: unique widget keys in ctca_panel_viewer"], "Committed"),
+    (["git", "push", "huggingface", "main"], "Pushed HF"),
+    (["git", "push", "origin", "main"], "Pushed GitHub"),
+]:
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    ok = r.returncode == 0 or "nothing to commit" in r.stdout + r.stderr
+    print(f"{'OK' if ok else 'WARN'}: {desc}" + ("" if ok else f" -- {r.stderr.strip()[:80]}"))
+
+print("DONE: Wait 60s then click CTCA Panel View.")

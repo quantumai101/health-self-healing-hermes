@@ -55,9 +55,9 @@ def render():
     # Controls row
     col1, col2, col3 = st.columns([2, 2, 4])
     with col1:
-        animate = st.toggle("Animate finding dots", key="ctca_panel_viewer_animate", value=False)
+        animate = st.toggle("Animate finding dots", key="ctca_panel_viewer_animate", value=False, key="ctca_animate_toggle")
     with col2:
-        show_labels = st.toggle("Show slice labels", key="ctca_panel_viewer_labels", value=True)
+        show_labels = st.toggle("Show slice labels", key="ctca_panel_viewer_labels", value=True, key="ctca_labels_toggle")
     with col3:
         st.caption("Patient: ZHANG, ZHIMING &middot; ID 350063 &middot; 20/04/2026 &middot; Medscan Merrylands &middot; W:400 C:40")
 
