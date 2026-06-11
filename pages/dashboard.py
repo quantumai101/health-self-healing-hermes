@@ -49,7 +49,13 @@ def audit_log_access(func: Callable) -> Callable:
 def require_auth(func: Callable) -> Callable:
     @wraps(func)
     def wrapper(*args, **kwargs):
-        if not st.session_state.get("user_authorized", False):
+        # Allow access if auth_token present (logged in via MFA)
+        # or user_authorized set by app.py session init
+        authed = (
+            st.session_state.get("user_authorized", False)
+            or bool(st.session_state.get("auth_token"))
+        )
+        if not authed:
             st.error("Unauthorized access. Please log in.")
             logger.warning("Unauthorized access attempt blocked.")
             return None

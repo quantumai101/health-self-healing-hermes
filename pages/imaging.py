@@ -1,7 +1,6 @@
 import streamlit as st
 import hashlib
 import logging
-import magic
 import os
 import tempfile
 import shutil
@@ -30,7 +29,7 @@ ALLOWED_MIME_TYPES = {
     'image/tiff', 'application/dicom'
 }
 ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tiff', '.dcm', '.dicom'}
-MAX_FILE_SIZE_MB = 200
+MAX_FILE_SIZE_MB = 50
 MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 SESSION_TIMEOUT_SECONDS = 3600
 
@@ -140,10 +139,14 @@ def process_file_stream(uploaded_file) -> Optional[Dict[str, Any]]:
         if file_hash in st.session_state.processed_files:
             return st.session_state.processed_files[file_hash]
 
-        header = uploaded_file.read(2048)
-        uploaded_file.seek(0)
-        mime = magic.from_buffer(header, mime=True)
-        
+        # mime check via extension only (no python-magic dependency on HF)
+        ext_to_mime = {
+            '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+            '.png': 'image/png',  '.webp': 'image/webp',
+            '.bmp': 'image/bmp',  '.tiff': 'image/tiff',
+            '.dcm': 'application/dicom', '.dicom': 'application/dicom',
+        }
+        mime = ext_to_mime.get(ext, 'application/octet-stream')
         if mime not in ALLOWED_MIME_TYPES:
             return None
             
@@ -179,118 +182,40 @@ def inject_ui_assets():
     </style>
     """, unsafe_allow_html=True)
 
-# Sequence display labels for grid
-_SEQUENCE_LABELS = [
-    ("Sequence_Axial_{:02d}",    "Axial View Plane Sequence"),
-    ("Sequence_Sagittal_{:02d}", "Sagittal View Plane Sequence"),
-    ("Sequence_Coronal_{:02d}",  "Coronal Cross Section Map"),
-]
-
-
-def _render_sequence_grid(files: list) -> None:
-    """Display uploaded files in a 3-column labelled sequence grid."""
-    if not files:
-        return
-    cols = st.columns(3)
-    for idx, meta in enumerate(files):
-        label_tmpl, caption = _SEQUENCE_LABELS[idx % len(_SEQUENCE_LABELS)]
-        seq_num = (idx // len(_SEQUENCE_LABELS)) + 1
-        seq_name = label_tmpl.format(seq_num)
-        with cols[idx % 3]:
-            st.markdown(
-                f"<div style='font-family:Courier New,monospace;font-size:13px;"
-                f"color:#7bb8f0;letter-spacing:.06em;margin-bottom:4px;'>{seq_name}</div>",
-                unsafe_allow_html=True,
-            )
-            ext = Path(meta.get("path", "")).suffix.lower()
-            if ext in {".jpg", ".jpeg", ".png", ".webp", ".bmp"}:
-                try:
-                    st.image(meta["path"], use_container_width=True)
-                except Exception:
-                    st.info(f"⬜ {meta['name']}")
-            elif ext in {".dcm", ".dicom"}:
-                try:
-                    import pydicom as _pd
-                    ds = _pd.dcmread(meta["path"])
-                    arr = ds.pixel_array.astype(float)
-                    arr = ((arr - arr.min()) / (arr.ptp() + 1e-9) * 255).astype("uint8")
-                    st.image(arr, use_container_width=True)
-                except Exception:
-                    st.info(f"📁 DICOM: {meta['name']}")
-            else:
-                st.info(f"📁 {meta['name']}")
-            st.markdown(
-                f"<div style='font-family:Courier New,monospace;font-size:10px;"
-                f"color:#4a7a9b;text-align:center;margin-top:4px;'>{caption}</div>",
-                unsafe_allow_html=True,
-            )
-
-
 def render():
-    """Main entry point — called by app.py routing."""
+    """Entry point for app.py routing."""
+    _render_inner()
+
+
+def _render_inner():
+    st.set_page_config(page_title="MediSync Imaging", layout="wide")
     inject_ui_assets()
 
-    st.markdown("## 📸 Advanced Multi-Sequence Imaging Core")
-    st.caption("Upload multiple DICOM, Rad-Scans, or Clinical Imaging Sequences…")
-
-    st.markdown(
-        "<div style='background:#0a0a1a;border:1px solid #1a1a3a;border-radius:8px;"
-        "padding:10px 16px;margin-bottom:16px;font-family:Courier New,monospace;"
-        "font-size:11px;color:#f5c842;'>⚕ CLINICAL DISCLAIMER: Outputs for decision support only. "
-        "DICOM files anonymised on upload. Manual PHI review required. "
-        "NOT FOR PRIMARY DIAGNOSTIC USE.</div>",
-        unsafe_allow_html=True,
-    )
-
+    st.title("🩻 Medical Imaging Analysis")
+    
     if "uploaded_files" not in st.session_state:
         st.session_state.uploaded_files = {}
 
-    uploaded_files = st.file_uploader(
-        "⬆ Upload",
-        accept_multiple_files=True,
-        type=["png", "jpg", "jpeg", "webp", "bmp", "tiff", "dcm", "dicom"],
-        label_visibility="collapsed",
-        key="imaging_uploader_v2",
-    )
-    st.caption(f"200MB per file • PNG, JPG, DICOM")
+    uploaded_files = st.file_uploader("Upload scans", accept_multiple_files=True)
 
     if uploaded_files:
-        with st.spinner("Processing uploads…"):
-            for f in uploaded_files:
-                validated_data = process_file_stream(f)
-                if validated_data:
-                    st.session_state.uploaded_files[validated_data["hash"]] = validated_data
-                else:
-                    st.error(f"Invalid, unsupported, or oversized file: {f.name}")
+        for f in uploaded_files:
+            validated_data = process_file_stream(f)
+            if validated_data:
+                st.session_state.uploaded_files[validated_data["hash"]] = validated_data
+            else:
+                st.error(f"Invalid, unsupported, or oversized file: {f.name}")
 
-    if st.button("🗑 Clear All Scans", key="imaging_clear_all_scans_btn"):
+    if st.button("Clear All Scans", key="imaging_clear_all_scans_btn"):
         cleanup_session_dir()
         st.rerun()
 
-    files = list(st.session_state.get("uploaded_files", {}).values())
-    if files:
-        st.markdown("---")
-        _render_sequence_grid(files)
-    else:
-        st.markdown(
-            "<div style='border:1px dashed #2a2a4a;border-radius:12px;padding:48px 24px;"
-            "text-align:center;color:#3a3a5a;font-family:Courier New,monospace;font-size:13px;"
-            "margin-top:24px;'>No sequences loaded.<br>"
-            "<span style='font-size:11px;color:#2a2a4a;'>"
-            "Upload PNG, JPG or DICOM files above to begin.</span></div>",
-            unsafe_allow_html=True,
-        )
+    if st.session_state.get("uploaded_files"):
+        st.write("### Queued Scans")
+        for file_meta in st.session_state.uploaded_files.values():
+            st.info(f"Processed: {file_meta['name']} - ⚠️ MANUAL REVIEW REQUIRED")
 
-    st.sidebar.markdown(
-        "### ⚠️ Clinical Disclaimer\nFindings must be verified by a clinician. "
-        "AI output is for research/support only. "
-        "All DICOM files require manual review for burned-in PHI."
-    )
-
-
-def main():
-    st.set_page_config(page_title="MediSync Imaging", layout="wide")
-    render()
+    st.sidebar.markdown("### ⚠️ Clinical Disclaimer\nFindings must be verified by a clinician. AI output is for research/support only. All DICOM files require manual review for burned-in PHI.")
 
 if __name__ == "__main__":
     try:
