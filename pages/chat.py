@@ -220,6 +220,13 @@ SUGGESTED_OPERATIONS = [
     ("Generate executive weekly report",          "NOVA",       "Generate an executive weekly population health report"),
     ("Run N-1 CTCA digital twin simulation",      "NEXUS",      "Run N-1 CTCA digital twin simulation"),
     ("Run health data compliance scan",           "SENTINEL",   "Run health data compliance scan"),
+    # 7th button: personal CTCA record — ZHANG, ZHIMING (aiq00479)
+    ("📋 CTCA Report — ZHANG, ZHIMING · ID 350063 · 20/04/2026 · Medscan Merrylands",
+     "NEXUS",
+     "Show CTCA clinical summary for ZHANG ZHIMING ID 350063: pLAD stenosis 17.3% CAD-RADS 2, "
+     "FAI -68.4 HU borderline elevated (above -70.1 HU threshold), Agatston 50 mild burden, "
+     "EF 58.2% normal, LV mass index 102.1 borderline. Serial CTCA in 2-3 years recommended. "
+     "Primary preventive protocol: statin + lifestyle. NOT for active diagnostic use."),
 ]
 
 
@@ -248,7 +255,7 @@ def render():
             
         return
 
-    st.markdown("### HEALTH DIGITAL WORKFORCE")
+    st.markdown("### 💬 AGENT COMMUNICATION & ORCHESTRATOR CHAT")
     prune_messages(MAX_SESSION_MESSAGES)
     messages = get_messages()
 
