@@ -23,9 +23,6 @@ import qrcode
 import jwt
 from io import BytesIO
 
-# -- HF Dataset DB Sync (free-tier persistence) -------------------------------
-import threading
-
 # -- HF Dataset DB Sync (free-tier persistence) --------------------------------
 import threading as _threading
 try:
@@ -75,58 +72,6 @@ def hf_db_push():
     _threading.Thread(target=_push, daemon=True).start()
 # hf_db_sync end ---------------------------------------------------------------
 
-try:
-    from huggingface_hub import hf_hub_download, upload_file, HfApi
-    _HF_SYNC_AVAILABLE = True
-except ImportError:
-    _HF_SYNC_AVAILABLE = False
-
-_HF_DATASET_REPO = "aiq00479/health-hermes-db"
-_HF_DB_FILENAME  = "users.db"
-_DB_SYNC_LOCK    = threading.Lock()
-
-def _hf_token() -> str:
-    """Read HF token from env (set as HF_TOKEN secret in Space settings)."""
-    return os.getenv("HF_TOKEN", "")
-
-def hf_db_pull():
-    """Download users.db from HF Dataset into local DB_PATH on startup."""
-    if not _HF_SYNC_AVAILABLE or not _hf_token():
-        return
-    try:
-        local = hf_hub_download(
-            repo_id=_HF_DATASET_REPO,
-            filename=_HF_DB_FILENAME,
-            repo_type="dataset",
-            token=_hf_token(),
-            local_dir=str(DB_PATH.parent),
-            local_dir_use_symlinks=False,
-        )
-        import shutil as _sh
-        if Path(local) != DB_PATH:
-            _sh.copy2(local, DB_PATH)
-    except Exception:
-        pass  # First run: no DB yet, init_db() will create it
-
-def hf_db_push():
-    """Upload current users.db to HF Dataset (called after write operations)."""
-    if not _HF_SYNC_AVAILABLE or not _hf_token() or not DB_PATH.exists():
-        return
-    def _push():
-        with _DB_SYNC_LOCK:
-            try:
-                api = HfApi(token=_hf_token())
-                api.upload_file(
-                    path_or_fileobj=str(DB_PATH),
-                    path_in_repo=_HF_DB_FILENAME,
-                    repo_id=_HF_DATASET_REPO,
-                    repo_type="dataset",
-                )
-            except Exception:
-                pass
-    threading.Thread(target=_push, daemon=True).start()
-# -----------------------------------------------------------------------------
-
 
 # ── Config ──────────────────────────────────────────────────────────────────
 
@@ -139,6 +84,7 @@ JWT_ALGO         = "HS256"
 JWT_EXPIRE_HOURS = 8    # absolute maximum — idle timeout (10 min) kicks in first
 APP_NAME         = "Health Hermes"
 
+
 # ── Database ─────────────────────────────────────────────────────────────────
 
 def get_db():
@@ -149,7 +95,6 @@ def get_db():
 
 def init_db():
     """Create tables if they don't exist. Call once at app startup."""
-    hf_db_pull()
     hf_db_pull()  # Restore DB from HF Dataset if available
     with get_db() as conn:
         conn.executescript("""
@@ -192,6 +137,7 @@ def init_db():
 
     DATA_ROOT.mkdir(parents=True, exist_ok=True)
 
+
 # ── User management ───────────────────────────────────────────────────────────
 
 def create_user(email: str, name: str, password: str) -> dict:
@@ -217,7 +163,6 @@ def create_user(email: str, name: str, password: str) -> dict:
     (user_dir / "ehr").mkdir(parents=True, exist_ok=True)
 
     hf_db_push()  # Persist new user to HF Dataset
-    hf_db_push()
     return get_user_by_id(user_id)
 
 
@@ -243,6 +188,7 @@ def verify_password(email: str, password: str) -> dict | None:
     if bcrypt.checkpw(password.encode(), user["password_hash"].encode()):
         return user
     return None
+
 
 # ── TOTP MFA ─────────────────────────────────────────────────────────────────
 
@@ -295,26 +241,32 @@ def verify_totp_and_enable(user_id: str, code: str) -> bool:
 def verify_totp_code(user_id: str, code: str) -> bool:
     """Verify TOTP code during login (supports backup codes)."""
     user = get_user_by_id(user_id)
-    if not user or not user["totp_secret"]:
+    if not user or not user.get("totp_secret"):
         return False
 
+    # Standard TOTP Verification
     totp = pyotp.TOTP(user["totp_secret"])
-    if totp.verify(code.strip(), valid_window=2):
+    if bool(totp.verify(code.strip(), valid_window=2)):
         return True
 
-    # Check backup codes
-    code_hash = hashlib.sha256(code.strip().upper().encode()).hexdigest()
-    codes = json.loads(user["backup_codes"] or "[]")
-    if code_hash in codes:
-        codes.remove(code_hash)
-        with get_db() as conn:
-            conn.execute(
-                "UPDATE users SET backup_codes=? WHERE id=?",
-                (json.dumps(codes), user_id)
-            )
-        return True
+    # Fallback: Check backup codes if user is recovering access
+    if user.get("backup_codes"):
+        try:
+            code_hash = hashlib.sha256(code.strip().upper().encode()).hexdigest()
+            codes = json.loads(user["backup_codes"] or "[]")
+            if code_hash in codes:
+                codes.remove(code_hash)
+                with get_db() as conn:
+                    conn.execute(
+                        "UPDATE users SET backup_codes=? WHERE id=?",
+                        (json.dumps(codes), user_id)
+                    )
+                return True
+        except Exception:
+            pass
 
     return False
+
 
 # ── JWT Sessions ─────────────────────────────────────────────────────────────
 
@@ -343,7 +295,6 @@ def create_session(user_id: str) -> str:
         )
 
     hf_db_push()  # Persist session to HF Dataset
-    hf_db_push()
     return token
 
 
@@ -387,6 +338,7 @@ def revoke_all_sessions(user_id: str):
     """Revoke every active session for a user (e.g. password change)."""
     with get_db() as conn:
         conn.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
+
 
 # ── Per-user data paths ───────────────────────────────────────────────────────
 
