@@ -28,35 +28,10 @@ except ImportError:
 from core.session import get_messages, append_message, add_log, prune_messages, get_user_role
 from agents import AGENT_REGISTRY
 
-# ── Clinical Disclaimer modal ─────────────────────────────────────────────────
+# ── Disclaimer state init (modal shown inside render() only) ─────────────────
 if "disclaimer_accepted" not in st.session_state:
     st.session_state["disclaimer_accepted"] = False
-
-if not st.session_state["disclaimer_accepted"]:
-    _sp1, _mid, _sp2 = st.columns([1, 4, 1])
-    with _mid:
-        st.markdown("""
-<div style="margin-top:0.5rem;background:#1a1a2e;border:2px solid #f59e0b;
-border-radius:16px;padding:2rem 2.5rem;text-align:center;color:#fff">
-<h2 style="color:#f59e0b;margin-bottom:1rem;font-size:1.3rem;letter-spacing:.05em">
-⚕ WARNING — CLINICAL DISCLAIMER</h2>
-<p style="font-size:.95rem;line-height:1.7;color:#d1d5db">
-AI outputs are for <strong>decision support only</strong> and are
-<strong>not diagnostic</strong>. All findings must be verified with
-clinical data by a qualified healthcare professional before any
-clinical action is taken.</p>
-</div>""", unsafe_allow_html=True)
-        st.markdown("&nbsp;", unsafe_allow_html=True)
-        if st.button(
-            "✓  I acknowledge and accept the clinical disclaimer",
-            use_container_width=True,
-            type="primary",
-            key="clinical_disclaimer_v3_btn_modal",
-        ):
-            st.session_state["disclaimer_accepted"] = True
-            st.rerun()
-    st.stop()
-# ── End disclaimer modal ──────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
 
 
 logger = logging.getLogger(__name__)
@@ -283,10 +258,33 @@ def _render_suggested_ops():
 
 def render():
     st.sidebar.markdown("### Safety Center")
-    if "disclaimer_accepted" not in st.session_state:
-        with st.container(border=True):
-            st.warning(DISCLAIMER_TEXT)
-        return
+
+    # ── Clinical Disclaimer modal (shown once per session) ────────────────────
+    if not st.session_state.get("disclaimer_accepted", False):
+        _sp1, _mid, _sp2 = st.columns([1, 4, 1])
+        with _mid:
+            st.markdown("""
+<div style="margin-top:0.5rem;background:#1a1a2e;border:2px solid #f59e0b;
+border-radius:16px;padding:2rem 2.5rem;text-align:center;color:#fff">
+<h2 style="color:#f59e0b;margin-bottom:1rem;font-size:1.3rem;letter-spacing:.05em">
+⚕ WARNING — CLINICAL DISCLAIMER</h2>
+<p style="font-size:.95rem;line-height:1.7;color:#d1d5db">
+AI outputs are for <strong>decision support only</strong> and are
+<strong>not diagnostic</strong>. All findings must be verified with
+clinical data by a qualified healthcare professional before any
+clinical action is taken.</p>
+</div>""", unsafe_allow_html=True)
+            st.markdown("&nbsp;", unsafe_allow_html=True)
+            if st.button(
+                "✓  I acknowledge and accept the clinical disclaimer",
+                use_container_width=True,
+                type="primary",
+                key="clinical_disclaimer_accept_btn",
+            ):
+                st.session_state["disclaimer_accepted"] = True
+                st.rerun()
+        return  # Don't render chat until accepted
+    # ── End disclaimer modal ──────────────────────────────────────────────────
 
     st.markdown("### HEALTH DIGITAL WORKFORCE")
     prune_messages(MAX_SESSION_MESSAGES)
