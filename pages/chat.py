@@ -246,7 +246,7 @@ SUGGESTED_OPERATIONS = [
      "SENTINEL",
      "Run health data compliance scan"),
     # 7th button — navigates to CTCA Panel View page (no agent call)
-    ("📋 CTCA Report — ZHANG, ZHIMING · ID 350063 · 20/04/2026 · Medscan Merrylands",
+    ("🩻 CTCA Report — ZHANG, ZHIMING · ID 350063 · 20/04/2026 · Medscan Merrylands",
      None,          # None = page navigation, not an agent
      "🩻 CTCA Panel View"),
 ]
@@ -295,6 +295,17 @@ def render():
     if not messages:
         _render_suggested_ops()
         st.divider()
+    else:
+        # Back button — clears conversation and returns to suggested ops
+        col_back, col_spacer = st.columns([1, 6])
+        with col_back:
+            if st.button("← Back", key="chat_back_btn", use_container_width=True):
+                from core.session import clear_messages
+                try:
+                    clear_messages()
+                except Exception:
+                    st.session_state["messages"] = []
+                st.rerun()
 
     for msg in messages:
         _render_message(msg["role"], msg["content"])
