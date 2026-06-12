@@ -64,6 +64,9 @@ _SUGGESTED_OPS: dict[str, list[tuple[str, str]]] = {
          "Run health data compliance scan and rotate the API secret"),
         ("Predict chronic disease risk for a patient with BMI 38.5, BP 145/92, glucose 6.8",
          "Predict chronic disease risk for a patient with BMI 38.5, BP 145/92, glucose 6.8"),
+        # 7th button — navigates to CTCA Panel View (prefix __NAV__ signals navigation)
+        ("🩻 CTCA Report — ZHANG, ZHIMING · ID 350063 · 20/04/2026 · Medscan Merrylands",
+         "__NAV__🩻 CTCA Panel View"),
     ],
 
     "compliance": [
@@ -266,7 +269,11 @@ def render_chat_widget(page_key: str) -> None:
                     key=btn_key,
                     use_container_width=True,
                 ):
-                    st.session_state[sug_key] = btn_prompt
+                    # Navigation buttons use __NAV__ prefix
+                    if btn_prompt.startswith("__NAV__"):
+                        st.session_state["page_selection"] = btn_prompt[7:]
+                    else:
+                        st.session_state[sug_key] = btn_prompt
                     st.rerun()
 
     st.write("")

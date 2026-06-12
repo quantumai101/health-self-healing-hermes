@@ -145,6 +145,7 @@ PAGE_META = {
     "🩻 MediSync Imaging":      {"color": "#f57c5c", "glyph": "◐", "label": "Imaging"},
     "📰 Health News":           {"color": "#f5a642", "glyph": "◉", "label": "News"},
     "🛡️ Compliance":            {"color": "#7c6fff", "glyph": "◉", "label": "Compliance"},
+    "🩻 CTCA Panel View":       {"color": "#5cc8f5", "glyph": "🩻", "label": "CTCA Panel View"},
 }
 
 def render_nav():
